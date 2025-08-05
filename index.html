@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>AI Object Detector with Voice (Thai Only)</title>
   <style>
     body {
@@ -13,6 +13,13 @@
       width: 80%;
       max-width: 640px;
       margin: 10px auto;
+      display: block;
+    }
+    #labelDetected {
+      font-size: 20px;
+      margin: 10px 0;
+      font-weight: bold;
+      color: #333;
     }
     #controls {
       margin-top: 20px;
@@ -21,29 +28,41 @@
       font-weight: bold;
       margin-left: 10px;
     }
+    button, input[type="range"] {
+      cursor: pointer;
+      font-size: 16px;
+      padding: 8px 12px;
+      margin: 5px;
+    }
   </style>
 </head>
 <body>
   <h1>ระบบช่วยเรียนรู้วัตถุสำหรับเด็ก</h1>
   <video id="video" autoplay muted playsinline></video>
+  <div id="labelDetected">รอการตรวจจับวัตถุ...</div>
+
   <div id="controls">
-    <button onclick="toggleCamera()">เปิด/ปิด กล้อง</button><br><br>
+    <button onclick="toggleCamera()">เปิด/ปิด กล้อง</button>
+    <button onclick="switchCamera()">สลับกล้องหน้า/หลัง</button><br><br>
+
     <label for="volumeRange">ระดับเสียง:</label>
     <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="1" onchange="setVolume(this.value)">
     <span id="volumeValue">100%</span>
   </div>
 
-  <!-- โหลดโมเดล -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
   <script>
-    let video = document.getElementById('video');
+    const video = document.getElementById('video');
+    const labelDetected = document.getElementById('labelDetected');
     let model;
     let isCameraOn = false;
     let volume = 1;
     let lastSpoken = {};
     const speakCooldown = 3000; // 3 วินาที
+    let currentStream = null;
+    let useFrontCamera = false; // เริ่มใช้กล้องหลัง (false)
 
     const THAI_LABELS = {
       'chair': 'เก้าอี้',
@@ -95,7 +114,6 @@
       'pan': 'กระทะ',
       'pot': 'หม้อ',
       'notebook': 'สมุด',
-      // เพิ่มได้อีก
     };
 
     function speak(text) {
@@ -110,6 +128,32 @@
       document.getElementById('volumeValue').innerText = Math.round(volume * 100) + "%";
     }
 
+    async function startCamera() {
+      stopCamera();
+      try {
+        const constraints = {
+          video: { facingMode: useFrontCamera ? 'user' : 'environment' }
+        };
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+        isCameraOn = true;
+        detectFrame();
+      } catch (err) {
+        alert("ไม่สามารถเปิดกล้องได้: " + err.message);
+        console.error(err);
+      }
+    }
+
+    function stopCamera() {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+        currentStream = null;
+      }
+      video.srcObject = null;
+      isCameraOn = false;
+      labelDetected.innerText = "กล้องถูกปิด";
+    }
+
     function toggleCamera() {
       if (isCameraOn) {
         stopCamera();
@@ -118,51 +162,52 @@
       }
     }
 
-    function startCamera() {
-      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
-        video.srcObject = stream;
-        isCameraOn = true;
-        detectFrame();
-      }).catch(err => {
-        console.error("ไม่สามารถเปิดกล้องได้", err);
-      });
-    }
-
-    function stopCamera() {
-      let stream = video.srcObject;
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+    function switchCamera() {
+      useFrontCamera = !useFrontCamera;
+      if (isCameraOn) {
+        startCamera(); // รีสตาร์ทกล้องใหม่พร้อมกล้องหน้า/หลังที่เลือก
       }
-      video.srcObject = null;
-      isCameraOn = false;
     }
 
     async function detectFrame() {
       if (!model || !isCameraOn) return;
-      model.detect(video).then(predictions => {
-        predictions.forEach(prediction => {
-          const label = prediction.class;
+
+      const predictions = await model.detect(video);
+
+      if (predictions.length > 0) {
+        // หา prediction ที่ confidence สูงสุด
+        let topPrediction = predictions.reduce((prev, curr) => (prev.score > curr.score ? prev : curr));
+        let label = topPrediction.class;
+        let thaiLabel = THAI_LABELS[label] || null;
+
+        if (thaiLabel) {
+          labelDetected.innerText = "พบวัตถุ: " + thaiLabel;
           const now = Date.now();
-          const thaiLabel = THAI_LABELS[label];
-          if (thaiLabel) {
-            if (!lastSpoken[label] || now - lastSpoken[label] > speakCooldown) {
-              speak(thaiLabel);
-              lastSpoken[label] = now;
-            }
+          if (!lastSpoken[label] || now - lastSpoken[label] > speakCooldown) {
+            speak(thaiLabel);
+            lastSpoken[label] = now;
           }
-        });
-        if (isCameraOn) {
-          requestAnimationFrame(detectFrame);
+        } else {
+          labelDetected.innerText = "พบวัตถุ: " + label + " (ไม่มีคำแปลไทย)";
         }
-      });
+      } else {
+        labelDetected.innerText = "ไม่พบวัตถุ";
+      }
+
+      if (isCameraOn) {
+        requestAnimationFrame(detectFrame);
+      }
     }
 
-    // โหลดโมเดลแล้วเริ่มกล้องทันที
+    // โหลดโมเดลแล้วเปิดกล้องอัตโนมัติ
     cocoSsd.load().then(loadedModel => {
       model = loadedModel;
       console.log("โหลดโมเดลเสร็จแล้ว");
-      startCamera(); // เปิดกล้องอัตโนมัติเมื่อโหลดเสร็จ
+      startCamera();
     });
+
+    // กำหนดค่าเสียงเริ่มต้น
+    setVolume(document.getElementById('volumeRange').value);
   </script>
 </body>
 </html>
