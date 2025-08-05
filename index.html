@@ -20,6 +20,7 @@
       margin: 10px 0;
       font-weight: bold;
       color: #333;
+      min-height: 24px;
     }
     #controls {
       margin-top: 20px;
@@ -39,7 +40,7 @@
 <body>
   <h1>ระบบช่วยเรียนรู้วัตถุสำหรับเด็ก</h1>
   <video id="video" autoplay muted playsinline></video>
-  <div id="labelDetected">รอการตรวจจับวัตถุ...</div>
+  <div id="labelDetected"></div>
 
   <div id="controls">
     <button onclick="toggleCamera()">เปิด/ปิด กล้อง</button>
@@ -161,7 +162,7 @@
       }
       video.srcObject = null;
       isCameraOn = false;
-      labelDetected.innerText = "กล้องถูกปิด";
+      labelDetected.innerText = "";  // ไม่แสดงข้อความใด ๆ
     }
 
     function toggleCamera() {
@@ -185,7 +186,6 @@
       const predictions = await model.detect(video);
 
       if (predictions.length > 0) {
-        // หา prediction ที่ confidence สูงสุด
         let topPrediction = predictions.reduce((prev, curr) => (prev.score > curr.score ? prev : curr));
         let label = topPrediction.class;
         let thaiLabel = THAI_LABELS[label] || null;
@@ -202,7 +202,7 @@
         }
         delete lastSpoken['not_found'];
       } else {
-        labelDetected.innerText = "ไม่พบวัตถุ";
+        labelDetected.innerText = "";
         const now = Date.now();
         if (!lastSpoken['not_found'] || now - lastSpoken['not_found'] > speakCooldown) {
           speak("ไม่พบวัตถุ");
@@ -215,14 +215,11 @@
       }
     }
 
-    // โหลดโมเดลแล้วเปิดกล้องอัตโนมัติ
     cocoSsd.load().then(loadedModel => {
       model = loadedModel;
-      console.log("โหลดโมเดลเสร็จแล้ว");
       startCamera();
     });
 
-    // กำหนดค่าเสียงเริ่มต้น
     setVolume(volumeRange.value);
   </script>
 </body>
