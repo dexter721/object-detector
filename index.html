@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Object Detector with Voice</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; }
+    video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+  <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
+  <video id="webcam" autoplay muted></video>
+  <canvas id="canvas"></canvas>
+  <p id="label">กำลังโหลดโมเดล...</p>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <script>
+    const video = document.getElementById('webcam');
+    const label = document.getElementById('label');
+    let model;
+    let lastSpoken = '';
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false
+      });
+      video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => resolve(video);
+      });
+    }
+
+    function speak(text) {
+      if (text !== lastSpoken) {
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = "th-TH"; // ให้เสียงเป็นภาษาไทย
+        speechSynthesis.speak(utter);
+        lastSpoken = text;
+      }
+    }
+
+    // แปลชื่อวัตถุเป็นภาษาไทย
+    const labelDict = {
+      "apple": "แอปเปิล",
+      "bottle": "ขวดน้ำ",
+      "banana": "กล้วย",
+      "sports ball": "ลูกบอล"
+      // เพิ่มตามต้องการ
+    };
+
+    async function detectFrame() {
+      const predictions = await model.detect(video);
+
+      if (predictions.length > 0) {
+        const name = predictions[0].class;
+
+        if (name !== "person") {
+          const thaiName = labelDict[name] || name;
+          label.textContent = `พบวัตถุ: ${thaiName}`;
+          speak(thaiName);
+        } else {
+          label.textContent = "พบวัตถุ: คน (ไม่พูด)";
+        }
+
+      } else {
+        label.textContent = "ไม่พบวัตถุ";
+      }
+
+      requestAnimationFrame(detectFrame);
+    }
+
+    async function main() {
+      await setupCamera();
+      video.play();
+      model = await cocoSsd.load();
+      label.textContent = "พร้อมตรวจจับแล้ว!";
+      detectFrame();
+    }
+
+    main();
+  </script>
+</body>
+</html>
