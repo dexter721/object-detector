@@ -46,7 +46,7 @@
     <button onclick="switchCamera()">สลับกล้องหน้า/หลัง</button><br><br>
 
     <label for="volumeRange">ระดับเสียง:</label>
-    <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="1" onchange="setVolume(this.value)">
+    <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="1">
     <span id="volumeValue">100%</span>
   </div>
 
@@ -56,13 +56,16 @@
   <script>
     const video = document.getElementById('video');
     const labelDetected = document.getElementById('labelDetected');
+    const volumeRange = document.getElementById('volumeRange');
+    const volumeValue = document.getElementById('volumeValue');
+
     let model;
     let isCameraOn = false;
     let volume = 1;
     let lastSpoken = {};
     const speakCooldown = 3000; // 3 วินาที
     let currentStream = null;
-    let useFrontCamera = false; // เริ่มใช้กล้องหลัง (false)
+    let useFrontCamera = false; // เริ่มกล้องหลัง
 
     const THAI_LABELS = {
       'chair': 'เก้าอี้',
@@ -117,6 +120,9 @@
     };
 
     function speak(text) {
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+      }
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'th-TH';
       utterance.volume = volume;
@@ -125,8 +131,12 @@
 
     function setVolume(val) {
       volume = parseFloat(val);
-      document.getElementById('volumeValue').innerText = Math.round(volume * 100) + "%";
+      volumeValue.innerText = Math.round(volume * 100) + "%";
     }
+
+    volumeRange.addEventListener('input', (e) => {
+      setVolume(e.target.value);
+    });
 
     async function startCamera() {
       stopCamera();
@@ -190,10 +200,7 @@
         } else {
           labelDetected.innerText = "พบวัตถุ: " + label + " (ไม่มีคำแปลไทย)";
         }
-
-        // เคลียร์ข้อความไม่พบวัตถุ เพื่อให้พูดใหม่ได้เมื่อไม่เจอ
         delete lastSpoken['not_found'];
-
       } else {
         labelDetected.innerText = "ไม่พบวัตถุ";
         const now = Date.now();
@@ -216,7 +223,7 @@
     });
 
     // กำหนดค่าเสียงเริ่มต้น
-    setVolume(document.getElementById('volumeRange').value);
+    setVolume(volumeRange.value);
   </script>
 </body>
 </html>
