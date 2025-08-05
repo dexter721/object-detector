@@ -1,185 +1,93 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>AI Object Detector with Voice</title>
   <style>
     body { text-align: center; font-family: sans-serif; }
     video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
     canvas { display: none; }
-    button {
-      font-size: 16px;
-      padding: 8px 16px;
-      margin: 10px;
-      cursor: pointer;
-    }
   </style>
 </head>
 <body>
   <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
   <video id="webcam" autoplay muted></video>
   <canvas id="canvas"></canvas>
-  <p id="label">กรุณากดเปิดกล้องเพื่อเริ่มใช้งาน</p>
-  <button id="toggleCamBtn">เปิดกล้อง</button>
+  <p id="label">กำลังโหลดโมเดล...</p>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <script>
     const video = document.getElementById('webcam');
     const label = document.getElementById('label');
-    const toggleCamBtn = document.getElementById('toggleCamBtn');
-
     let model;
-    let stream = null;
-    let isCameraOn = false;
-    let detecting = false;
 
-    const lastSpokenTimes = {};
-
-    // แปลชื่อวัตถุเป็นภาษาไทย
     const labelDict = {
-      "dining table": "โต๊ะ",
       "chair": "เก้าอี้",
+      "couch": "โซฟา", // ถ้ามีเตียงในโมเดลให้ใช้ bed แทน
       "bed": "เตียง",
-      "cabinet": "ตู้",
+      "dining table": "โต๊ะ",
       "tv": "ทีวี",
       "cell phone": "โทรศัพท์",
-      "box": "กล่อง",
       "book": "หนังสือ",
-      "pen": "ปากกา",
-      "cup": "แก้ว",
       "bottle": "ขวด",
-      "plate": "จาน",
-      "spoon": "ช้อน",
-      "pillow": "หมอน",
-      "teddy bear": "ตุ๊กตา",
-      "sports ball": "ลูกบอล",
-      "toy car": "รถของเล่น",
-      "robot": "หุ่นยนต์",
-      "board": "กระดาน",
-      "pencil": "ดินสอ",
-      "eraser": "ยางลบ",
-      "notebook": "สมุด",
-      "pot": "หม้อ",
-      "pan": "กระทะ",
-      "bowl": "ถ้วย",
-      "fork": "ส้อม",
-      "computer": "คอมพิวเตอร์",
-      "laptop": "โน้ตบุ๊ก",
-      "tablet": "แท็บเล็ต",
-      "camera": "กล้อง",
-      "headphones": "หูฟัง",
-      "speaker": "ลำโพง",
+      "cup": "ถ้วย",
+      "bowl": "ชาม",
+      "remote": "รีโมท",
       "mouse": "เมาส์",
       "keyboard": "คีย์บอร์ด",
-      "remote": "รีโมท",
-      "printer": "เครื่องพิมพ์",
-      "microphone": "ไมโครโฟน",
-      "charging cable": "สายชาร์จ",
-      "power bank": "พาวเวอร์แบงก์"
+      "laptop": "โน้ตบุ๊ก",
+      "computer": "คอมพิวเตอร์", // coco-ssd ไม่มี label นี้
+      "microwave": "ไมโครเวฟ", // แทน หม้อ/กระทะ
+      "sports ball": "ลูกบอล",
+      "scissors": "กรรไกร",
+      "backpack": "กระเป๋า", 
+      "teddy bear": "ตุ๊กตา"
     };
 
-    // ชุดคำที่อนุญาตให้พูด (ภาษาไทย)
-    const allowedSpeakWords = new Set([
-      "โต๊ะ",
-      "เก้าอี้",
-      "เตียง",
-      "ตู้",
-      "ทีวี",
-      "โทรศัพท์",
-      "กล่อง",
-      "หนังสือ",
-      "ปากกา",
-      "แก้ว",
-      "ขวด",
-      "จาน",
-      "ช้อน",
-      "หมอน",
-      "ตุ๊กตา",
-      "ลูกบอล",
-      "รถของเล่น",
-      "หุ่นยนต์",
-      "กระดาน",
-      "ดินสอ",
-      "ยางลบ",
-      "สมุด",
-      "หม้อ",
-      "กระทะ",
-      "ถ้วย",
-      "ส้อม",
-      "คอมพิวเตอร์",
-      "โน้ตบุ๊ก",
-      "แท็บเล็ต",
-      "กล้อง",
-      "หูฟัง",
-      "ลำโพง",
-      "เมาส์",
-      "คีย์บอร์ด",
-      "รีโมท",
-      "เครื่องพิมพ์",
-      "ไมโครโฟน",
-      "สายชาร์จ",
-      "พาวเวอร์แบงก์"
-    ]);
-
-    function canSpeak(objectName) {
-      const now = Date.now();
-      if (!lastSpokenTimes[objectName]) return true;
-      return (now - lastSpokenTimes[objectName]) >= 5000; // 5 วินาที
-    }
+    let lastSpokenTimes = {}; // บันทึกเวลาแต่ละวัตถุที่พูดล่าสุด
 
     async function setupCamera() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" },
-          audio: false
-        });
-        video.srcObject = stream;
-        return new Promise(resolve => {
-          video.onloadedmetadata = () => resolve(video);
-        });
-      } catch (err) {
-        alert("ไม่สามารถเข้าถึงกล้องได้: " + err.message);
-        throw err;
-      }
-    }
-
-    function stopCamera() {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
-      video.srcObject = null;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false
+      });
+      video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => resolve(video);
+      });
     }
 
     function speak(text) {
-      if (speechSynthesis.speaking) return;
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "th-TH";
       speechSynthesis.speak(utter);
     }
 
     async function detectFrame() {
-      if (!detecting) return;
-
       const predictions = await model.detect(video);
 
       if (predictions.length > 0) {
-        const name = predictions[0].class;
-
-        if (name !== "person") {
-          const thaiName = labelDict[name] || null;
-
-          label.textContent = thaiName ? `พบวัตถุ: ${thaiName}` : `พบวัตถุ: ${name}`;
-
-          if (thaiName && allowedSpeakWords.has(thaiName)) {
-            if (canSpeak(name)) {
+        let found = false;
+        for (const prediction of predictions) {
+          const name = prediction.class;
+          if (labelDict[name]) {
+            const thaiName = labelDict[name];
+            const now = Date.now();
+            if (!lastSpokenTimes[thaiName] || now - lastSpokenTimes[thaiName] > 3000) {
+              label.textContent = `พบวัตถุ: ${thaiName}`;
               speak(thaiName);
-              lastSpokenTimes[name] = Date.now();
+              lastSpokenTimes[thaiName] = now;
+            } else {
+              label.textContent = `พบวัตถุ: ${thaiName} (รอพูดใหม่)`;
             }
+            found = true;
+            break; // พูดทีละชิ้นพอ
           }
-        } else {
-          label.textContent = "พบวัตถุ: คน (ไม่พูด)";
+        }
+
+        if (!found) {
+          label.textContent = "พบวัตถุที่ไม่อยู่ในรายการ (ไม่พูด)";
         }
       } else {
         label.textContent = "ไม่พบวัตถุ";
@@ -188,49 +96,15 @@
       requestAnimationFrame(detectFrame);
     }
 
-    async function startDetection() {
-      if (!model) {
-        label.textContent = "กำลังโหลดโมเดล...";
-        model = await cocoSsd.load();
-      }
+    async function main() {
+      await setupCamera();
+      video.play();
+      model = await cocoSsd.load();
       label.textContent = "พร้อมตรวจจับแล้ว!";
-      detecting = true;
       detectFrame();
     }
 
-    async function startCamera() {
-      if (isCameraOn) return;
-      try {
-        await setupCamera();
-        video.play();
-        isCameraOn = true;
-        toggleCamBtn.textContent = "ปิดกล้อง";
-        await startDetection();
-      } catch {
-        // error จัดการไว้ใน setupCamera แล้ว
-      }
-    }
-
-    function stopDetection() {
-      detecting = false;
-      label.textContent = "กล้องถูกปิด";
-    }
-
-    function stopCameraAndDetection() {
-      if (!isCameraOn) return;
-      stopDetection();
-      stopCamera();
-      isCameraOn = false;
-      toggleCamBtn.textContent = "เปิดกล้อง";
-    }
-
-    toggleCamBtn.addEventListener('click', () => {
-      if (isCameraOn) {
-        stopCameraAndDetection();
-      } else {
-        startCamera();
-      }
-    });
+    main();
   </script>
 </body>
 </html>
