@@ -3,22 +3,19 @@ import torch
 from gtts import gTTS
 import os
 import time
-from playsound import playsound
-import threading
 
+# โหลดโมเดล YOLOv5n (Nano – เบาและเร็ว)
 model = torch.hub.load('yolov5', 'yolov5n', source='local')
+
+# เปิดกล้อง 720p
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 frame_count = 0
-skip_frame = 5  # ตรวจจับทุก 5 เฟรม
-speak_cooldown = 5  # พูดห่างกัน 5 วินาที
+skip_frame = 2  # ตรวจจับทุก 2 เฟรม
 
-last_label = ""
-last_time_spoken = 0
-is_speaking = False
-
+# คำแปลชื่อวัตถุ
 label_dict = {
     "apple": "แอปเปิล",
     "bottle": "ขวดน้ำ",
@@ -26,13 +23,8 @@ label_dict = {
     "banana": "กล้วย"
 }
 
-def speak(text):
-    global is_speaking
-    is_speaking = True
-    tts = gTTS(text=text, lang='th')
-    tts.save('speak.mp3')
-    playsound('speak.mp3')
-    is_speaking = False
+# เก็บเวลาพูดครั้งล่าสุดของแต่ละวัตถุ
+last_spoken = {}
 
 while True:
     ret, frame = cap.read()
@@ -42,26 +34,29 @@ while True:
     frame = cv2.flip(frame, 1)
     frame_count += 1
 
-    if frame_count % skip_frame == 0 and not is_speaking:
+    if frame_count % skip_frame == 0:
         results = model(frame)
         detections = results.pred[0]
         labels = results.names
 
         for *box, conf, cls in detections:
             label = labels[int(cls)]
-
+            
+            # ไม่แสดงกรอบ, ไม่พูด person
             if label in label_dict:
-                now = time.time()
-                # พูดเฉพาะถ้า: ไม่ใช่วัตถุเดิม หรือผ่านไปแล้วนานพอ
-                if label != last_label or now - last_time_spoken > speak_cooldown:
-                    last_label = label
-                    last_time_spoken = now
-                    text_to_speak = label_dict[label]
-                    print(f'พูดว่า: {text_to_speak}')
-                    threading.Thread(target=speak, args=(text_to_speak,)).start()
-                break  # เจอแล้วพูดตัวเดียวพอ
+                current_time = time.time()
+                last_time = last_spoken.get(label, 0)
 
-    cv2.imshow('Object Detection', frame)
+                # พูดก็ต่อเมื่อยังไม่เคยพูด หรือผ่านมาแล้วเกิน 10 วินาที
+                if current_time - last_time > 10:
+                    speak_label = label_dict[label]
+                    print(f'พูดว่า: {speak_label}')
+                    tts = gTTS(text=speak_label, lang='th')
+                    tts.save('speak.mp3')
+                    os.system('start speak.mp3')
+                    last_spoken[label] = current_time
+
+    cv2.imshow('Object Detection 720p', frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
