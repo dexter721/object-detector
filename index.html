@@ -7,6 +7,7 @@
     body { text-align: center; font-family: sans-serif; }
     video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
     canvas { display: none; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; }
   </style>
 </head>
 <body>
@@ -15,13 +16,21 @@
   <canvas id="canvas"></canvas>
   <p id="label">กำลังโหลดโมเดล...</p>
 
+  <div>
+    <button onclick="toggleCamera()">🔁 เปิด/ปิดกล้อง</button>
+    <button onclick="changeVolume(0.1)">🔊 เพิ่มเสียง</button>
+    <button onclick="changeVolume(-0.1)">🔉 ลดเสียง</button>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <script>
     const video = document.getElementById('webcam');
     const label = document.getElementById('label');
     let model;
-
+    let isCameraOn = true;
+    let stream = null;
+    let volumeLevel = 1.0;
     const labelDict = {
       "chair": "เก้าอี้",
       "couch": "โซฟา",
@@ -30,7 +39,7 @@
       "tv": "ทีวี",
       "cell phone": "โทรศัพท์",
       "book": "หนังสือ",
-      "bottle": "ขวดน้ำ",
+      "bottle": "ขวด",
       "cup": "ถ้วย",
       "bowl": "ชาม",
       "remote": "รีโมท",
@@ -42,17 +51,17 @@
       "scissors": "กรรไกร",
       "backpack": "กระเป๋า",
       "teddy bear": "ตุ๊กตา",
-      "pen": "ปากกา",         // เพิ่ม
-      "pencil": "ดินสอ",      // เพิ่ม
-      "eraser": "ยางลบ",       // เพิ่ม
-      "headphones": "หูฟัง",   // เพิ่ม
-      "box": "กล่อง"          // เพิ่ม
+      "pen": "ปากกา",
+      "pencil": "ดินสอ",
+      "eraser": "ยางลบ",
+      "headphones": "หูฟัง",
+      "box": "กล่อง"
     };
 
     let lastSpokenTimes = {};
 
     async function setupCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
         audio: false
       });
@@ -65,12 +74,14 @@
     function speak(text) {
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "th-TH";
+      utter.volume = volumeLevel;
       speechSynthesis.speak(utter);
     }
 
     async function detectFrame() {
-      const predictions = await model.detect(video);
+      if (!isCameraOn || !model) return;
 
+      const predictions = await model.detect(video);
       if (predictions.length > 0) {
         let found = false;
         for (const prediction of predictions) {
@@ -89,7 +100,6 @@
             break;
           }
         }
-
         if (!found) {
           label.textContent = "พบวัตถุที่ไม่อยู่ในรายการ (ไม่พูด)";
         }
@@ -100,9 +110,38 @@
       requestAnimationFrame(detectFrame);
     }
 
-    async function main() {
+    function toggleCamera() {
+      if (isCameraOn) {
+        stopCamera();
+      } else {
+        startCamera();
+      }
+    }
+
+    function stopCamera() {
+      isCameraOn = false;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+      label.textContent = "กล้องถูกปิด";
+    }
+
+    async function startCamera() {
+      isCameraOn = true;
       await setupCamera();
       video.play();
+      label.textContent = "กล้องเปิดแล้ว กำลังตรวจจับ...";
+      detectFrame();
+    }
+
+    function changeVolume(delta) {
+      volumeLevel = Math.min(1, Math.max(0, volumeLevel + delta));
+      label.textContent = `ระดับเสียง: ${(volumeLevel * 100).toFixed(0)}%`;
+    }
+
+    async function main() {
+      await startCamera();
       model = await cocoSsd.load();
       label.textContent = "พร้อมตรวจจับแล้ว!";
       detectFrame();
