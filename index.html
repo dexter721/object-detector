@@ -2,113 +2,130 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>AI Object Detector with Voice</title>
+  <title>AI Object Detector</title>
   <style>
     body { text-align: center; font-family: sans-serif; }
-    video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
-    canvas { display: none; }
+    video, canvas { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
+    button, input[type=range] { margin: 10px; padding: 10px 20px; font-size: 1em; }
+    #volume-label { display: inline-block; width: 80px; }
   </style>
 </head>
 <body>
-  <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
-  <video id="webcam" autoplay muted></video>
-  <canvas id="canvas"></canvas>
-  <p id="label">กำลังโหลดโมเดล...</p>
+  <h1>ระบบช่วยเรียนรู้วัตถุด้วยกล้องและเสียง</h1>
+  <video id="video" autoplay muted playsinline></video><br>
+  <canvas id="canvas" style="display:none;"></canvas><br>
+  <div>
+    <button id="toggleCameraBtn">ปิดกล้อง</button>
+    <button id="switchCameraBtn">สลับกล้อง</button><br>
+    <label id="volume-label">เสียง: 50%</label>
+    <input type="range" id="volumeSlider" min="0" max="100" value="50">
+  </div>
+  <p id="detected"></p>
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.14.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <script>
-    const video = document.getElementById('webcam');
-    const label = document.getElementById('label');
-    let model;
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const toggleCameraBtn = document.getElementById('toggleCameraBtn');
+    const switchCameraBtn = document.getElementById('switchCameraBtn');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeLabel = document.getElementById('volume-label');
+    const detectedText = document.getElementById('detected');
 
-    const labelDict = {
-      "chair": "เก้าอี้",
-      "couch": "โซฟา",
-      "bed": "เตียง",
-      "dining table": "โต๊ะ",
-      "tv": "ทีวี",
-      "cell phone": "โทรศัพท์",
-      "book": "หนังสือ",
-      "bottle": "ขวด",
-      "cup": "ถ้วย",
-      "bowl": "ชาม",
-      "remote": "รีโมท",
-      "mouse": "เมาส์",
-      "keyboard": "คีย์บอร์ด",
-      "laptop": "โน้ตบุ๊ก",
-      "microwave": "ไมโครเวฟ",
-      "sports ball": "ลูกบอล",
-      "scissors": "กรรไกร",
-      "backpack": "กระเป๋า",
-      "teddy bear": "ตุ๊กตา",
-      "pen": "ปากกา",         // เพิ่ม
-      "pencil": "ดินสอ",      // เพิ่ม
-      "eraser": "ยางลบ",       // เพิ่ม
-      "headphones": "หูฟัง",   // เพิ่ม
-      "box": "กล่อง"          // เพิ่ม
+    let model, stream;
+    let currentCamera = 'environment';
+    let speakingHistory = {};
+    let volume = 0.5;
+
+    const thaiLabels = {
+      "person": "คน", "bicycle": "จักรยาน", "car": "รถยนต์", "motorcycle": "มอเตอร์ไซค์",
+      "bus": "รถบัส", "train": "รถไฟ", "truck": "รถบรรทุก", "traffic light": "ไฟจราจร",
+      "backpack": "กระเป๋าเป้", "umbrella": "ร่ม", "handbag": "กระเป๋าถือ", "tie": "เนกไท",
+      "suitcase": "กระเป๋าเดินทาง", "chair": "เก้าอี้", "couch": "โซฟา", "potted plant": "ต้นไม้กระถาง",
+      "bed": "เตียง", "laptop": "แล็ปท็อป", "mouse": "เมาส์", "remote": "รีโมท",
+      "keyboard": "คีย์บอร์ด", "cell phone": "โทรศัพท์", "tv": "ทีวี", "book": "หนังสือ",
+      "clock": "นาฬิกา", "scissors": "กรรไกร", "toothbrush": "แปรงสีฟัน",
+      "pen": "ปากกา", "eraser": "ยางลบ", "pencil": "ดินสอ", "headphones": "หูฟัง", "box": "กล่อง"
     };
 
-    let lastSpokenTimes = {};
-
-    async function setupCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false
-      });
-      video.srcObject = stream;
-      return new Promise(resolve => {
-        video.onloadedmetadata = () => resolve(video);
-      });
+    function speak(text) {
+      const synth = window.speechSynthesis;
+      if (!synth.speaking) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'th-TH';
+        utterance.volume = volume;
+        synth.speak(utterance);
+      }
     }
 
-    function speak(text) {
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = "th-TH";
-      speechSynthesis.speak(utter);
+    async function startCamera() {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: currentCamera }
+      });
+      video.srcObject = stream;
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
     }
 
     async function detectFrame() {
-      const predictions = await model.detect(video);
+      const context = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const predictions = await model.detect(canvas);
+      let detected = [];
 
-      if (predictions.length > 0) {
-        let found = false;
-        for (const prediction of predictions) {
-          const name = prediction.class;
-          if (labelDict[name]) {
-            const thaiName = labelDict[name];
-            const now = Date.now();
-            if (!lastSpokenTimes[thaiName] || now - lastSpokenTimes[thaiName] > 3000) {
-              label.textContent = พบวัตถุ: ${thaiName};
-              speak(thaiName);
-              lastSpokenTimes[thaiName] = now;
-            } else {
-              label.textContent = พบวัตถุ: ${thaiName} (รอพูดใหม่);
-            }
-            found = true;
-            break;
+      predictions.forEach(pred => {
+        const label = pred.class;
+        const translated = thaiLabels[label];
+        if (translated) {
+          const now = Date.now();
+          if (!speakingHistory[translated] || now - speakingHistory[translated] > 3000) {
+            speak(translated);
+            speakingHistory[translated] = now;
           }
+          detected.push(translated);
         }
+      });
 
-        if (!found) {
-          label.textContent = "พบวัตถุที่ไม่อยู่ในรายการ (ไม่พูด)";
-        }
-      } else {
-        label.textContent = "ไม่พบวัตถุ";
-      }
-
+      detectedText.innerText = detected.length > 0 ? 'ตรวจพบ: ' + detected.join(', ') : '';
       requestAnimationFrame(detectFrame);
     }
 
-    async function main() {
-      await setupCamera();
-      video.play();
-      model = await cocoSsd.load();
-      label.textContent = "พร้อมตรวจจับแล้ว!";
-      detectFrame();
-    }
+    volumeSlider.addEventListener('input', () => {
+      volume = volumeSlider.value / 100;
+      volumeLabel.innerText = 'เสียง: ' + volumeSlider.value + '%';
+    });
 
-    main();
+    toggleCameraBtn.addEventListener('click', () => {
+      if (video.srcObject) {
+        stopCamera();
+        toggleCameraBtn.innerText = 'เปิดกล้อง';
+      } else {
+        startCamera().then(() => {
+          toggleCameraBtn.innerText = 'ปิดกล้อง';
+        });
+      }
+    });
+
+    switchCameraBtn.addEventListener('click', () => {
+      stopCamera();
+      currentCamera = currentCamera === 'user' ? 'environment' : 'user';
+      startCamera();
+    });
+
+    cocoSsd.load().then(loadedModel => {
+      model = loadedModel;
+      startCamera().then(() => {
+        requestAnimationFrame(detectFrame);
+      });
+    });
   </script>
 </body>
 </html>
