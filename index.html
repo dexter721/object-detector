@@ -20,7 +20,7 @@
     <p>โปรดกดปุ่มเพื่อเปิดกล้องและอนุญาตเสียงพูด</p>
   </div>
 
-  <video id="webcam" autoplay muted playsinline style="display:none; transform-origin: center;"></video>
+  <video id="webcam" autoplay muted playsinline style="display:none;"></video>
 
   <div id="controls" style="display:none;">
     <button id="toggleCamBtn">ปิดกล้อง</button>
@@ -85,24 +85,18 @@
         stream.getTracks().forEach(track => track.stop());
         stream = null;
       }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: currentFacingMode },
-          audio: false
-        });
-      } catch (e) {
-        alert('ไม่สามารถเข้าถึงกล้องได้: ' + e.message);
-        throw e;
-      }
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: currentFacingMode },
+        audio: false
+      });
       video.srcObject = stream;
       return new Promise(resolve => {
         video.onloadedmetadata = () => resolve(video);
       });
     }
 
-    // ปลดล็อกเสียงด้วย silent utterance
     async function unlockAudio() {
-      return new Promise(resolve => {
+      return new Promise((resolve) => {
         const utter = new SpeechSynthesisUtterance('');
         utter.volume = 0;
         utter.lang = "th-TH";
@@ -136,7 +130,7 @@
           const name = prediction.class;
           if (labelDict[name]) {
             const thaiName = labelDict[name];
-            label.textContent = `พบวัตถุ: ${thaiName}`;
+            label.textContent = พบวัตถุ: ${thaiName};
             speak(thaiName);
             found = true;
             break;
@@ -156,7 +150,6 @@
       await setupCamera();
       video.play();
 
-      // ปรับภาพ mirror เมื่อกล้องหน้า
       if (currentFacingMode === "user") {
         video.style.transform = 'scaleX(-1)';
       } else {
@@ -184,54 +177,17 @@
       toggleCamBtn.textContent = "เปิดกล้อง";
     }
 
-    // event listeners รองรับหลาย event สำหรับมือถือ/PC
-    function addMultiEventListener(element, eventNames, handler) {
-      eventNames.forEach(eventName => {
-        element.addEventListener(eventName, handler);
-      });
-    }
-
-    // เริ่มต้นจากปุ่มกดเท่านั้น เพื่อ unlock audio + เปิดกล้อง + โหลดโมเดล
-    function onStart() {
-      startScreen.style.display = "none";
-      video.style.display = "block";
-      controls.style.display = "block";
-
-      unlockAudio()
-        .then(() => startCameraAndDetect())
-        .then(() => {
-          isCameraOn = true;
-          toggleCamBtn.textContent = "ปิดกล้อง";
-        })
-        .catch(err => {
-          alert('เกิดข้อผิดพลาด: ' + err.message);
-          startScreen.style.display = "block";
-          video.style.display = "none";
-          controls.style.display = "none";
-        });
-    }
-
-    addMultiEventListener(startBtn, ['click', 'touchstart', 'pointerdown'], e => {
-      e.preventDefault();
-      onStart();
-    });
-
-    addMultiEventListener(toggleCamBtn, ['click', 'touchstart', 'pointerdown'], e => {
-      e.preventDefault();
+    toggleCamBtn.addEventListener('click', async () => {
       if (isCameraOn) {
         stopCameraAndDetect();
       } else {
-        unlockAudio().then(() => startCameraAndDetect())
-          .then(() => {
-            isCameraOn = true;
-            toggleCamBtn.textContent = "ปิดกล้อง";
-          })
-          .catch(err => alert('ไม่สามารถเปิดกล้องได้: ' + err.message));
+        await startCameraAndDetect();
+        isCameraOn = true;
+        toggleCamBtn.textContent = "ปิดกล้อง";
       }
     });
 
-    addMultiEventListener(switchCamBtn, ['click', 'touchstart', 'pointerdown'], async e => {
-      e.preventDefault();
+    switchCamBtn.addEventListener('click', async () => {
       currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
       if (isCameraOn) {
         await startCameraAndDetect();
@@ -242,6 +198,18 @@
       const val = volumeSlider.value;
       volumeValue.textContent = val;
       speechVolume = val / 100;
+    });
+
+    startBtn.addEventListener('click', async () => {
+      startScreen.style.display = "none";
+      video.style.display = "block";
+      controls.style.display = "block";
+
+      await unlockAudio();
+
+      await startCameraAndDetect();
+      isCameraOn = true;
+      toggleCamBtn.textContent = "ปิดกล้อง";
     });
   </script>
 
