@@ -17,10 +17,10 @@
 
   <div id="startScreen">
     <button id="startBtn" style="font-size:24px; padding: 15px 30px;">เริ่มใช้งาน</button>
-    <p>โปรดกดปุ่มเพื่อเปิดกล้องและอนุญาตเสียงพูดนะจ้ะ</p>
+    <p>โปรดกดปุ่มเพื่อเปิดกล้องและอนุญาตเสียงพูด</p>
   </div>
 
-  <video id="webcam" autoplay muted playsinline style="display:none;"></video>
+  <video id="webcam" autoplay muted playsinline style="display:none; transform-origin: center;"></video>
 
   <div id="controls" style="display:none;">
     <button id="toggleCamBtn">ปิดกล้อง</button>
@@ -50,47 +50,62 @@
     let isCameraOn = false;
     let detecting = false;
     let lastSpokenTimes = {};
-    let currentFacingMode = "environment";
-    let speechVolume = 1.0;
-    let selectedVoice = null;
+    let currentFacingMode = "environment"; // เริ่มกล้องหลัง
+    let speechVolume = 1.0; // ค่าระหว่าง 0 ถึง 1
 
     const labelDict = {
-      "chair": "เก้าอี้", "couch": "โซฟา", "bed": "เตียง", "dining table": "โต๊ะ",
-      "tv": "ทีวี", "cell phone": "โทรศัพท์", "book": "หนังสือ", "bottle": "ขวด",
-      "cup": "ถ้วย", "bowl": "ชาม", "remote": "รีโมท", "mouse": "เมาส์", "keyboard": "คีย์บอร์ด",
-      "laptop": "โน้ตบุ๊ก", "microwave": "ไมโครเวฟ", "sports ball": "ลูกบอล", "scissors": "กรรไกร",
-      "backpack": "กระเป๋า", "teddy bear": "ตุ๊กตา", "pen": "ปากกา", "pencil": "ดินสอ",
-      "eraser": "ยางลบ", "headphones": "หูฟัง", "box": "กล่อง"
+      "chair": "เก้าอี้",
+      "couch": "โซฟา",
+      "bed": "เตียง",
+      "dining table": "โต๊ะ",
+      "tv": "ทีวี",
+      "cell phone": "โทรศัพท์",
+      "book": "หนังสือ",
+      "bottle": "ขวด",
+      "cup": "ถ้วย",
+      "bowl": "ชาม",
+      "remote": "รีโมท",
+      "mouse": "เมาส์",
+      "keyboard": "คีย์บอร์ด",
+      "laptop": "โน้ตบุ๊ก",
+      "microwave": "ไมโครเวฟ",
+      "sports ball": "ลูกบอล",
+      "scissors": "กรรไกร",
+      "backpack": "กระเป๋า",
+      "teddy bear": "ตุ๊กตา",
+      "pen": "ปากกา",
+      "pencil": "ดินสอ",
+      "eraser": "ยางลบ",
+      "headphones": "หูฟัง",
+      "box": "กล่อง"
     };
-
-    function loadVoices() {
-      const voices = speechSynthesis.getVoices();
-      selectedVoice = voices.find(v => v.lang === 'th-TH') || voices.find(v => v.lang.startsWith('en')) || null;
-    }
-
-    speechSynthesis.onvoiceschanged = loadVoices;
 
     async function setupCamera() {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
       }
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: currentFacingMode },
-        audio: false
-      });
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: currentFacingMode },
+          audio: false
+        });
+      } catch (e) {
+        alert('ไม่สามารถเข้าถึงกล้องได้: ' + e.message);
+        throw e;
+      }
       video.srcObject = stream;
       return new Promise(resolve => {
         video.onloadedmetadata = () => resolve(video);
       });
     }
 
+    // ปลดล็อกเสียงด้วย silent utterance
     async function unlockAudio() {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const utter = new SpeechSynthesisUtterance('');
         utter.volume = 0;
         utter.lang = "th-TH";
-        if (selectedVoice) utter.voice = selectedVoice;
         utter.onend = () => resolve();
         speechSynthesis.speak(utter);
       });
@@ -105,7 +120,6 @@
         const utter = new SpeechSynthesisUtterance(text);
         utter.lang = "th-TH";
         utter.volume = speechVolume;
-        if (selectedVoice) utter.voice = selectedVoice;
         speechSynthesis.speak(utter);
         lastSpokenTimes[text] = now;
       }
@@ -142,6 +156,7 @@
       await setupCamera();
       video.play();
 
+      // ปรับภาพ mirror เมื่อกล้องหน้า
       if (currentFacingMode === "user") {
         video.style.transform = 'scaleX(-1)';
       } else {
@@ -169,17 +184,54 @@
       toggleCamBtn.textContent = "เปิดกล้อง";
     }
 
-    toggleCamBtn.addEventListener('click', async () => {
+    // event listeners รองรับหลาย event สำหรับมือถือ/PC
+    function addMultiEventListener(element, eventNames, handler) {
+      eventNames.forEach(eventName => {
+        element.addEventListener(eventName, handler);
+      });
+    }
+
+    // เริ่มต้นจากปุ่มกดเท่านั้น เพื่อ unlock audio + เปิดกล้อง + โหลดโมเดล
+    function onStart() {
+      startScreen.style.display = "none";
+      video.style.display = "block";
+      controls.style.display = "block";
+
+      unlockAudio()
+        .then(() => startCameraAndDetect())
+        .then(() => {
+          isCameraOn = true;
+          toggleCamBtn.textContent = "ปิดกล้อง";
+        })
+        .catch(err => {
+          alert('เกิดข้อผิดพลาด: ' + err.message);
+          startScreen.style.display = "block";
+          video.style.display = "none";
+          controls.style.display = "none";
+        });
+    }
+
+    addMultiEventListener(startBtn, ['click', 'touchstart', 'pointerdown'], e => {
+      e.preventDefault();
+      onStart();
+    });
+
+    addMultiEventListener(toggleCamBtn, ['click', 'touchstart', 'pointerdown'], e => {
+      e.preventDefault();
       if (isCameraOn) {
         stopCameraAndDetect();
       } else {
-        await startCameraAndDetect();
-        isCameraOn = true;
-        toggleCamBtn.textContent = "ปิดกล้อง";
+        unlockAudio().then(() => startCameraAndDetect())
+          .then(() => {
+            isCameraOn = true;
+            toggleCamBtn.textContent = "ปิดกล้อง";
+          })
+          .catch(err => alert('ไม่สามารถเปิดกล้องได้: ' + err.message));
       }
     });
 
-    switchCamBtn.addEventListener('click', async () => {
+    addMultiEventListener(switchCamBtn, ['click', 'touchstart', 'pointerdown'], async e => {
+      e.preventDefault();
       currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
       if (isCameraOn) {
         await startCameraAndDetect();
@@ -191,21 +243,7 @@
       volumeValue.textContent = val;
       speechVolume = val / 100;
     });
-
-    startBtn.addEventListener('click', async () => {
-      loadVoices();
-      await unlockAudio();
-
-      startScreen.style.display = "none";
-      video.style.display = "block";
-      controls.style.display = "block";
-
-      await startCameraAndDetect();
-      isCameraOn = true;
-      toggleCamBtn.textContent = "ปิดกล้อง";
-    });
   </script>
 
 </body>
 </html>
-
