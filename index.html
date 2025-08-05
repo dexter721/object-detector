@@ -14,13 +14,12 @@
       max-width: 640px;
       margin: 10px auto;
     }
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-    }
     #controls {
       margin-top: 20px;
+    }
+    #volumeValue {
+      font-weight: bold;
+      margin-left: 10px;
     }
   </style>
 </head>
@@ -28,12 +27,16 @@
   <h1>ระบบช่วยเรียนรู้วัตถุสำหรับเด็ก</h1>
   <video id="video" autoplay muted playsinline></video>
   <div id="controls">
-    <button onclick="toggleCamera()">เปิด/ปิด กล้อง</button>
+    <button onclick="toggleCamera()">เปิด/ปิด กล้อง</button><br><br>
     <label for="volumeRange">ระดับเสียง:</label>
     <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="1" onchange="setVolume(this.value)">
+    <span id="volumeValue">100%</span>
   </div>
+
+  <!-- โหลดโมเดล -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
   <script>
     let video = document.getElementById('video');
     let model;
@@ -92,7 +95,7 @@
       'pan': 'กระทะ',
       'pot': 'หม้อ',
       'notebook': 'สมุด',
-      // เพิ่มได้ตามต้องการ
+      // เพิ่มได้อีก
     };
 
     function speak(text) {
@@ -104,7 +107,7 @@
 
     function setVolume(val) {
       volume = parseFloat(val);
-      console.log("ระดับเสียง:", volume);
+      document.getElementById('volumeValue').innerText = Math.round(volume * 100) + "%";
     }
 
     function toggleCamera() {
@@ -135,7 +138,7 @@
     }
 
     async function detectFrame() {
-      if (!model) return;
+      if (!model || !isCameraOn) return;
       model.detect(video).then(predictions => {
         predictions.forEach(prediction => {
           const label = prediction.class;
@@ -154,9 +157,11 @@
       });
     }
 
+    // โหลดโมเดลแล้วเริ่มกล้องทันที
     cocoSsd.load().then(loadedModel => {
       model = loadedModel;
-      console.log("โมเดลโหลดเสร็จแล้ว");
+      console.log("โหลดโมเดลเสร็จแล้ว");
+      startCamera(); // เปิดกล้องอัตโนมัติเมื่อโหลดเสร็จ
     });
   </script>
 </body>
