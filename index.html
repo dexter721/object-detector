@@ -50,35 +50,25 @@
     let isCameraOn = false;
     let detecting = false;
     let lastSpokenTimes = {};
-    let currentFacingMode = "environment"; // เริ่มกล้องหลัง
-    let speechVolume = 1.0; // ค่าระหว่าง 0 ถึง 1
+    let currentFacingMode = "environment";
+    let speechVolume = 1.0;
+    let selectedVoice = null;
 
     const labelDict = {
-      "chair": "เก้าอี้",
-      "couch": "โซฟา",
-      "bed": "เตียง",
-      "dining table": "โต๊ะ",
-      "tv": "ทีวี",
-      "cell phone": "โทรศัพท์",
-      "book": "หนังสือ",
-      "bottle": "ขวดน้ำ",
-      "cup": "ถ้วย",
-      "bowl": "ชาม",
-      "remote": "รีโมท",
-      "mouse": "เมาส์",
-      "keyboard": "คีย์บอร์ด",
-      "laptop": "โน้ตบุ๊ก",
-      "microwave": "ไมโครเวฟ",
-      "sports ball": "ลูกบอล",
-      "scissors": "กรรไกร",
-      "backpack": "กระเป๋า",
-      "teddy bear": "ตุ๊กตา",
-      "pen": "ปากกา",
-      "pencil": "ดินสอ",
-      "eraser": "ยางลบ",
-      "headphones": "หูฟัง",
-      "box": "กล่อง"
+      "chair": "เก้าอี้", "couch": "โซฟา", "bed": "เตียง", "dining table": "โต๊ะ",
+      "tv": "ทีวี", "cell phone": "โทรศัพท์", "book": "หนังสือ", "bottle": "ขวด",
+      "cup": "ถ้วย", "bowl": "ชาม", "remote": "รีโมท", "mouse": "เมาส์", "keyboard": "คีย์บอร์ด",
+      "laptop": "โน้ตบุ๊ก", "microwave": "ไมโครเวฟ", "sports ball": "ลูกบอล", "scissors": "กรรไกร",
+      "backpack": "กระเป๋า", "teddy bear": "ตุ๊กตา", "pen": "ปากกา", "pencil": "ดินสอ",
+      "eraser": "ยางลบ", "headphones": "หูฟัง", "box": "กล่อง"
     };
+
+    function loadVoices() {
+      const voices = speechSynthesis.getVoices();
+      selectedVoice = voices.find(v => v.lang === 'th-TH') || voices.find(v => v.lang.startsWith('en')) || null;
+    }
+
+    speechSynthesis.onvoiceschanged = loadVoices;
 
     async function setupCamera() {
       if (stream) {
@@ -100,6 +90,7 @@
         const utter = new SpeechSynthesisUtterance('');
         utter.volume = 0;
         utter.lang = "th-TH";
+        if (selectedVoice) utter.voice = selectedVoice;
         utter.onend = () => resolve();
         speechSynthesis.speak(utter);
       });
@@ -114,6 +105,7 @@
         const utter = new SpeechSynthesisUtterance(text);
         utter.lang = "th-TH";
         utter.volume = speechVolume;
+        if (selectedVoice) utter.voice = selectedVoice;
         speechSynthesis.speak(utter);
         lastSpokenTimes[text] = now;
       }
@@ -201,11 +193,12 @@
     });
 
     startBtn.addEventListener('click', async () => {
+      loadVoices();
+      await unlockAudio();
+
       startScreen.style.display = "none";
       video.style.display = "block";
       controls.style.display = "block";
-
-      await unlockAudio();
 
       await startCameraAndDetect();
       isCameraOn = true;
@@ -215,4 +208,3 @@
 
 </body>
 </html>
-
