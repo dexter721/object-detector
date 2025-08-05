@@ -1,226 +1,116 @@
+index html
+
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
-  <title>AI Object Detector with Voice (Thai Only)</title>
+  <meta charset="UTF-8">
+  <title>AI Object Detector with Voice</title>
   <style>
-    body {
-      text-align: center;
-      font-family: sans-serif;
-    }
-    video {
-      border: 2px solid black;
-      width: 80%;
-      max-width: 640px;
-      margin: 10px auto;
-      display: block;
-    }
-    #labelDetected {
-      font-size: 20px;
-      margin: 10px 0;
-      font-weight: bold;
-      color: #333;
-      min-height: 24px;
-    }
-    #controls {
-      margin-top: 20px;
-    }
-    #volumeValue {
-      font-weight: bold;
-      margin-left: 10px;
-    }
-    button, input[type="range"] {
-      cursor: pointer;
-      font-size: 16px;
-      padding: 8px 12px;
-      margin: 5px;
-    }
+    body { text-align: center; font-family: sans-serif; }
+    video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
+    canvas { display: none; }
   </style>
 </head>
 <body>
-  <h1>ระบบช่วยเรียนรู้วัตถุสำหรับเด็ก</h1>
-  <video id="video" autoplay muted playsinline></video>
-  <div id="labelDetected"></div>
+  <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
+  <video id="webcam" autoplay muted></video>
+  <canvas id="canvas"></canvas>
+  <p id="label">กำลังโหลดโมเดล...</p>
 
-  <div id="controls">
-    <button onclick="toggleCamera()">เปิด/ปิด กล้อง</button>
-    <button onclick="switchCamera()">สลับกล้องหน้า/หลัง</button><br><br>
-
-    <label for="volumeRange">ระดับเสียง:</label>
-    <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="1">
-    <span id="volumeValue">100%</span>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-
   <script>
-    const video = document.getElementById('video');
-    const labelDetected = document.getElementById('labelDetected');
-    const volumeRange = document.getElementById('volumeRange');
-    const volumeValue = document.getElementById('volumeValue');
-
+    const video = document.getElementById('webcam');
+    const label = document.getElementById('label');
     let model;
-    let isCameraOn = false;
-    let volume = 1;
-    let lastSpoken = {};
-    const speakCooldown = 3000; // 3 วินาที
-    let currentStream = null;
-    let useFrontCamera = false; // เริ่มกล้องหลัง
 
-    const THAI_LABELS = {
-      'chair': 'เก้าอี้',
-      'bed': 'เตียง',
-      'couch': 'โซฟา',
-      'tv': 'ทีวี',
-      'cell phone': 'โทรศัพท์',
-      'bottle': 'ขวด',
-      'book': 'หนังสือ',
-      'cup': 'แก้ว',
-      'bowl': 'ถ้วย',
-      'dining table': 'โต๊ะ',
-      'remote': 'รีโมท',
-      'keyboard': 'คีย์บอร์ด',
-      'mouse': 'เมาส์',
-      'laptop': 'โน้ตบุ๊ก',
-      'microwave': 'ไมโครเวฟ',
-      'oven': 'เตาอบ',
-      'sink': 'อ่างล้างจาน',
-      'refrigerator': 'ตู้เย็น',
-      'backpack': 'กระเป๋า',
-      'handbag': 'กระเป๋าถือ',
-      'suitcase': 'กระเป๋าเดินทาง',
-      'scissors': 'กรรไกร',
-      'toothbrush': 'แปรงสีฟัน',
-      'hair drier': 'ไดร์เป่าผม',
-      'toilet': 'โถส้วม',
-      'mirror': 'กระจก',
-      'pen': 'ปากกา',
-      'pencil': 'ดินสอ',
-      'eraser': 'ยางลบ',
-      'headphones': 'หูฟัง',
-      'box': 'กล่อง',
-      'computer': 'คอมพิวเตอร์',
-      'tablet': 'แท็บเล็ต',
-      'printer': 'เครื่องพิมพ์',
-      'microphone': 'ไมโครโฟน',
-      'charger': 'สายชาร์จ',
-      'power bank': 'พาวเวอร์แบงก์',
-      'fork': 'ส้อม',
-      'spoon': 'ช้อน',
-      'plate': 'จาน',
-      'pillow': 'หมอน',
-      'doll': 'ตุ๊กตา',
-      'ball': 'ลูกบอล',
-      'toy car': 'รถของเล่น',
-      'robot': 'หุ่นยนต์',
-      'board': 'กระดาน',
-      'pan': 'กระทะ',
-      'pot': 'หม้อ',
-      'notebook': 'สมุด',
+    const labelDict = {
+      "chair": "เก้าอี้",
+      "couch": "โซฟา",
+      "bed": "เตียง",
+      "dining table": "โต๊ะ",
+      "tv": "ทีวี",
+      "cell phone": "โทรศัพท์",
+      "book": "หนังสือ",
+      "bottle": "ขวดน้ำ",
+      "cup": "ถ้วย",
+      "bowl": "ชาม",
+      "remote": "รีโมท",
+      "mouse": "เมาส์",
+      "keyboard": "คีย์บอร์ด",
+      "laptop": "โน้ตบุ๊ก",
+      "microwave": "ไมโครเวฟ",
+      "sports ball": "ลูกบอล",
+      "scissors": "กรรไกร",
+      "backpack": "กระเป๋า",
+      "teddy bear": "ตุ๊กตา",
+      "pen": "ปากกา",         // เพิ่ม
+      "pencil": "ดินสอ",      // เพิ่ม
+      "eraser": "ยางลบ",       // เพิ่ม
+      "headphones": "หูฟัง",   // เพิ่ม
+      "box": "กล่อง"          // เพิ่ม
     };
 
+    let lastSpokenTimes = {};
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false
+      });
+      video.srcObject = stream;
+      return new Promise(resolve => {
+        video.onloadedmetadata = () => resolve(video);
+      });
+    }
+
     function speak(text) {
-      if (speechSynthesis.speaking) {
-        speechSynthesis.cancel();
-      }
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'th-TH';
-      utterance.volume = volume;
-      speechSynthesis.speak(utterance);
-    }
-
-    function setVolume(val) {
-      volume = parseFloat(val);
-      volumeValue.innerText = Math.round(volume * 100) + "%";
-    }
-
-    volumeRange.addEventListener('input', (e) => {
-      setVolume(e.target.value);
-    });
-
-    async function startCamera() {
-      stopCamera();
-      try {
-        const constraints = {
-          video: { facingMode: useFrontCamera ? 'user' : 'environment' }
-        };
-        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = currentStream;
-        isCameraOn = true;
-        detectFrame();
-      } catch (err) {
-        alert("ไม่สามารถเปิดกล้องได้: " + err.message);
-        console.error(err);
-      }
-    }
-
-    function stopCamera() {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-        currentStream = null;
-      }
-      video.srcObject = null;
-      isCameraOn = false;
-      labelDetected.innerText = "";  // ไม่แสดงข้อความใด ๆ
-    }
-
-    function toggleCamera() {
-      if (isCameraOn) {
-        stopCamera();
-      } else {
-        startCamera();
-      }
-    }
-
-    function switchCamera() {
-      useFrontCamera = !useFrontCamera;
-      if (isCameraOn) {
-        startCamera(); // รีสตาร์ทกล้องใหม่พร้อมกล้องหน้า/หลังที่เลือก
-      }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "th-TH";
+      speechSynthesis.speak(utter);
     }
 
     async function detectFrame() {
-      if (!model || !isCameraOn) return;
-
       const predictions = await model.detect(video);
 
       if (predictions.length > 0) {
-        let topPrediction = predictions.reduce((prev, curr) => (prev.score > curr.score ? prev : curr));
-        let label = topPrediction.class;
-        let thaiLabel = THAI_LABELS[label] || null;
-
-        if (thaiLabel) {
-          labelDetected.innerText = "พบวัตถุ: " + thaiLabel;
-          const now = Date.now();
-          if (!lastSpoken[label] || now - lastSpoken[label] > speakCooldown) {
-            speak(thaiLabel);
-            lastSpoken[label] = now;
+        let found = false;
+        for (const prediction of predictions) {
+          const name = prediction.class;
+          if (labelDict[name]) {
+            const thaiName = labelDict[name];
+            const now = Date.now();
+            if (!lastSpokenTimes[thaiName] || now - lastSpokenTimes[thaiName] > 3000) {
+              label.textContent = พบวัตถุ: ${thaiName};
+              speak(thaiName);
+              lastSpokenTimes[thaiName] = now;
+            } else {
+              label.textContent = พบวัตถุ: ${thaiName} (รอพูดใหม่);
+            }
+            found = true;
+            break;
           }
-        } else {
-          labelDetected.innerText = "พบวัตถุ: " + label + " (ไม่มีคำแปลไทย)";
         }
-        delete lastSpoken['not_found'];
+
+        if (!found) {
+          label.textContent = "พบวัตถุที่ไม่อยู่ในรายการ (ไม่พูด)";
+        }
       } else {
-        labelDetected.innerText = "";
-        const now = Date.now();
-        if (!lastSpoken['not_found'] || now - lastSpoken['not_found'] > speakCooldown) {
-          speak("ไม่พบวัตถุ");
-          lastSpoken['not_found'] = now;
-        }
+        label.textContent = "ไม่พบวัตถุ";
       }
 
-      if (isCameraOn) {
-        requestAnimationFrame(detectFrame);
-      }
+      requestAnimationFrame(detectFrame);
     }
 
-    cocoSsd.load().then(loadedModel => {
-      model = loadedModel;
-      startCamera();
-    });
+    async function main() {
+      await setupCamera();
+      video.play();
+      model = await cocoSsd.load();
+      label.textContent = "พร้อมตรวจจับแล้ว!";
+      detectFrame();
+    }
 
-    setVolume(volumeRange.value);
+    main();
   </script>
 </body>
 </html>
