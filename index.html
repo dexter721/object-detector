@@ -97,6 +97,17 @@
       });
     }
 
+    // ฟังก์ชันปลดล็อกเสียงด้วยการเล่นเสียงเงียบๆ สั้นๆ
+    async function unlockAudio() {
+      return new Promise((resolve) => {
+        const utter = new SpeechSynthesisUtterance('');
+        utter.volume = 0;
+        utter.lang = "th-TH";
+        utter.onend = () => resolve();
+        speechSynthesis.speak(utter);
+      });
+    }
+
     // ฟังก์ชันพูดเสียงโดยใช้ Web Speech API และปรับเสียงตาม slider
     function speak(text) {
       const now = Date.now();
@@ -197,6 +208,10 @@
       startScreen.style.display = "none";
       video.style.display = "block";
       controls.style.display = "block";
+
+      // ปลดล็อกเสียงก่อนเริ่มกล้องและตรวจจับ
+      await unlockAudio();
+
       await startCameraAndDetect();
       isCameraOn = true;
       toggleCamBtn.textContent = "ปิดกล้อง";
