@@ -34,18 +34,99 @@
     let isCameraOn = false;
     let detecting = false;
 
-    // เก็บชื่อวัตถุที่ตรวจจับได้ล่าสุดในเฟรมก่อนหน้า
     let lastDetectedObject = '';
-
-    // เก็บเวลาที่พูดวัตถุแต่ละตัว (เป็นวินาที) 
     const lastSpokenTimes = {};
 
-    // เวลาเป็นมิลลิวินาที (Date.now())
+    // แปลชื่อวัตถุเป็นภาษาไทย (ตัวอย่างบางคำตาม COCO)
+    const labelDict = {
+      "dining table": "โต๊ะ",
+      "chair": "เก้าอี้",
+      "bed": "เตียง",
+      "cabinet": "ตู้",
+      "tv": "ทีวี",
+      "cell phone": "โทรศัพท์",
+      "box": "กล่อง",
+      "book": "หนังสือ",
+      "pen": "ปากกา",
+      "cup": "แก้ว",
+      "bottle": "ขวด",
+      "plate": "จาน",
+      "spoon": "ช้อน",
+      "pillow": "หมอน",
+      "teddy bear": "ตุ๊กตา",
+      "sports ball": "ลูกบอล",
+      "toy car": "รถของเล่น",
+      "robot": "หุ่นยนต์",
+      "board": "กระดาน",
+      "pencil": "ดินสอ",
+      "eraser": "ยางลบ",
+      "notebook": "สมุด",
+      "pot": "หม้อ",
+      "pan": "กระทะ",
+      "bowl": "ถ้วย",
+      "fork": "ส้อม",
+      "computer": "คอมพิวเตอร์",
+      "laptop": "โน้ตบุ๊ก",
+      "tablet": "แท็บเล็ต",
+      "camera": "กล้อง",
+      "headphones": "หูฟัง",
+      "speaker": "ลำโพง",
+      "mouse": "เมาส์",
+      "keyboard": "คีย์บอร์ด",
+      "remote": "รีโมท",
+      "printer": "เครื่องพิมพ์",
+      "microphone": "ไมโครโฟน",
+      "charging cable": "สายชาร์จ",
+      "power bank": "พาวเวอร์แบงก์"
+    };
+
+    // ชุดคำที่อนุญาตให้พูด (ภาษาไทย)
+    const allowedSpeakWords = new Set([
+      "โต๊ะ",
+      "เก้าอี้",
+      "เตียง",
+      "ตู้",
+      "ทีวี",
+      "โทรศัพท์",
+      "กล่อง",
+      "หนังสือ",
+      "ปากกา",
+      "แก้ว",
+      "ขวด",
+      "จาน",
+      "ช้อน",
+      "หมอน",
+      "ตุ๊กตา",
+      "ลูกบอล",
+      "รถของเล่น",
+      "หุ่นยนต์",
+      "กระดาน",
+      "ดินสอ",
+      "ยางลบ",
+      "สมุด",
+      "หม้อ",
+      "กระทะ",
+      "ถ้วย",
+      "ส้อม",
+      "คอมพิวเตอร์",
+      "โน้ตบุ๊ก",
+      "แท็บเล็ต",
+      "กล้อง",
+      "หูฟัง",
+      "ลำโพง",
+      "เมาส์",
+      "คีย์บอร์ด",
+      "รีโมท",
+      "เครื่องพิมพ์",
+      "ไมโครโฟน",
+      "สายชาร์จ",
+      "พาวเวอร์แบงก์"
+    ]);
+
     function canSpeak(objectName) {
       const now = Date.now();
-      if (!lastSpokenTimes[objectName]) return true; // ไม่เคยพูดเลย -> พูดได้
-      const elapsed = now - lastSpokenTimes[objectName];
-      return elapsed >= 10000; // ผ่าน 10 วิ ถึงจะพูดใหม่
+      if (!lastSpokenTimes[objectName]) return true;
+      return (now - lastSpokenTimes[objectName]) >= 10000;
     }
 
     async function setupCamera() {
@@ -73,22 +154,11 @@
     }
 
     function speak(text) {
-      if (speechSynthesis.speaking) {
-        // ถ้าเสียงกำลังพูดอยู่ รอให้จบก่อน
-        return;
-      }
+      if (speechSynthesis.speaking) return;
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "th-TH";
       speechSynthesis.speak(utter);
     }
-
-    const labelDict = {
-      "apple": "แอปเปิล",
-      "bottle": "ขวดน้ำ",
-      "banana": "กล้วย",
-      "sports ball": "ลูกบอล"
-      // เพิ่มเติมได้ตามต้องการ
-    };
 
     async function detectFrame() {
       if (!detecting) return;
@@ -102,30 +172,27 @@
           const thaiName = labelDict[name] || name;
           label.textContent = `พบวัตถุ: ${thaiName}`;
 
-          if (name !== lastDetectedObject) {
-            // เจอวัตถุตัวใหม่ที่ต่างจากตัวก่อนหน้า
-            if (canSpeak(name)) {
-              speak(thaiName);
-              lastSpokenTimes[name] = Date.now();
+          if (allowedSpeakWords.has(thaiName)) {
+            if (name !== lastDetectedObject) {
+              if (canSpeak(name)) {
+                speak(thaiName);
+                lastSpokenTimes[name] = Date.now();
+              }
+              lastDetectedObject = name;
+            } else {
+              if (canSpeak(name)) {
+                speak(thaiName);
+                lastSpokenTimes[name] = Date.now();
+              }
             }
-            lastDetectedObject = name;
-
           } else {
-            // วัตถุตัวเดิมที่เจอซ้ำในเฟรมนี้
-            // ถ้ายังไม่ครบ 10 วิ ไม่พูดซ้ำ
-            // แต่ถ้าครบ 10 วิ ให้พูดซ้ำ และอัพเดตเวลา
-            if (canSpeak(name)) {
-              speak(thaiName);
-              lastSpokenTimes[name] = Date.now();
-            }
-            // ไม่เปลี่ยน lastDetectedObject เพราะเหมือนเดิม
+            // ไม่อยู่ใน allowedSpeakWords => ไม่พูด
+            lastDetectedObject = '';
           }
-
         } else {
           label.textContent = "พบวัตถุ: คน (ไม่พูด)";
           lastDetectedObject = '';
         }
-
       } else {
         label.textContent = "ไม่พบวัตถุ";
         lastDetectedObject = '';
