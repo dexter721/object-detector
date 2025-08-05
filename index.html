@@ -53,7 +53,6 @@
     let currentFacingMode = "environment"; // เริ่มกล้องหลัง
     let speechVolume = 1.0; // ค่าระหว่าง 0 ถึง 1
 
-    // รายชื่อวัตถุและคำแปลภาษาไทยที่ให้พูดเท่านั้น
     const labelDict = {
       "chair": "เก้าอี้",
       "couch": "โซฟา",
@@ -81,7 +80,6 @@
       "box": "กล่อง"
     };
 
-    // ตั้งค่ากล้อง
     async function setupCamera() {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
@@ -97,7 +95,6 @@
       });
     }
 
-    // ฟังก์ชันปลดล็อกเสียงด้วยการเล่นเสียงเงียบๆ สั้นๆ
     async function unlockAudio() {
       return new Promise((resolve) => {
         const utter = new SpeechSynthesisUtterance('');
@@ -108,22 +105,20 @@
       });
     }
 
-    // ฟังก์ชันพูดเสียงโดยใช้ Web Speech API และปรับเสียงตาม slider
     function speak(text) {
       const now = Date.now();
-      if (!lastSpokenTimes[text] || (now - lastSpokenTimes[text] > 3000)) { // 3 วิ ห้ามพูดซ้ำ
+      if (!lastSpokenTimes[text] || (now - lastSpokenTimes[text] > 3000)) {
         if (speechSynthesis.speaking) {
           speechSynthesis.cancel();
         }
         const utter = new SpeechSynthesisUtterance(text);
         utter.lang = "th-TH";
-        utter.volume = speechVolume; // ปรับเสียงตาม slider (0-1)
+        utter.volume = speechVolume;
         speechSynthesis.speak(utter);
         lastSpokenTimes[text] = now;
       }
     }
 
-    // ตรวจจับวัตถุในวิดีโอ
     async function detectFrame() {
       if (!detecting) return;
 
@@ -138,7 +133,7 @@
             label.textContent = `พบวัตถุ: ${thaiName}`;
             speak(thaiName);
             found = true;
-            break; // พูดแค่วัตถุเดียวในรอบนี้
+            break;
           }
         }
         if (!found) {
@@ -151,10 +146,16 @@
       requestAnimationFrame(detectFrame);
     }
 
-    // เริ่มเปิดกล้องและโหลดโมเดล พร้อมเริ่มตรวจจับ
     async function startCameraAndDetect() {
       await setupCamera();
       video.play();
+
+      if (currentFacingMode === "user") {
+        video.style.transform = 'scaleX(-1)';
+      } else {
+        video.style.transform = 'none';
+      }
+
       if (!model) {
         label.textContent = "กำลังโหลดโมเดล...";
         model = await cocoSsd.load();
@@ -164,7 +165,6 @@
       detectFrame();
     }
 
-    // ปิดกล้องและหยุดตรวจจับ
     function stopCameraAndDetect() {
       detecting = false;
       label.textContent = "";
@@ -177,7 +177,6 @@
       toggleCamBtn.textContent = "เปิดกล้อง";
     }
 
-    // ปุ่มเปิด-ปิดกล้อง
     toggleCamBtn.addEventListener('click', async () => {
       if (isCameraOn) {
         stopCameraAndDetect();
@@ -188,7 +187,6 @@
       }
     });
 
-    // ปุ่มสลับกล้องหน้า-หลัง
     switchCamBtn.addEventListener('click', async () => {
       currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
       if (isCameraOn) {
@@ -196,20 +194,17 @@
       }
     });
 
-    // ปรับเสียงพูดแบบเรียลไทม์ พร้อมโชว์เปอร์เซ็นต์
     volumeSlider.addEventListener('input', () => {
       const val = volumeSlider.value;
       volumeValue.textContent = val;
       speechVolume = val / 100;
     });
 
-    // กดปุ่มเริ่มใช้งาน (user interaction สำคัญ)
     startBtn.addEventListener('click', async () => {
       startScreen.style.display = "none";
       video.style.display = "block";
       controls.style.display = "block";
 
-      // ปลดล็อกเสียงก่อนเริ่มกล้องและตรวจจับ
       await unlockAudio();
 
       await startCameraAndDetect();
