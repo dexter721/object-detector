@@ -160,7 +160,7 @@
     }
 
     async function startCamera() {
-      if (isCameraOn) return;
+      // ไม่เช็ค isCameraOn เพื่อให้สลับกล้องทำงานได้เสมอ
       try {
         await setupCamera();
         video.play();
@@ -202,6 +202,11 @@
     switchCamBtn.addEventListener('click', async () => {
       useFrontCamera = !useFrontCamera;
       if (isCameraOn) {
+        // หยุดกล้องเก่าแล้วเริ่มกล้องใหม่ทันที
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          stream = null;
+        }
         await startCamera();
       }
     });
