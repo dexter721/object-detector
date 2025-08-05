@@ -5,7 +5,7 @@
 <title>AI Object Detector with Voice</title>
 <style>
   body { text-align: center; font-family: sans-serif; margin: 0; padding: 20px; }
-  video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
+  video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; transition: transform 0.3s ease; }
   button, label { font-size: 16px; padding: 8px 12px; margin: 5px; cursor: pointer; }
   #controls { margin: 15px 0; }
   #volumeValue { font-weight: bold; }
@@ -104,6 +104,14 @@
       }
     }
 
+    function updateVideoMirror() {
+      if (useFrontCamera) {
+        video.style.transform = "scaleX(-1)";
+      } else {
+        video.style.transform = "scaleX(1)";
+      }
+    }
+
     function speak(text) {
       if (speechSynthesis.speaking) {
         speechSynthesis.cancel();
@@ -160,10 +168,10 @@
     }
 
     async function startCamera() {
-      // ไม่เช็ค isCameraOn เพื่อให้สลับกล้องทำงานได้เสมอ
       try {
         await setupCamera();
         video.play();
+        updateVideoMirror();
         isCameraOn = true;
         toggleCamBtn.textContent = "ปิดกล้อง";
         await startDetection();
@@ -202,7 +210,6 @@
     switchCamBtn.addEventListener('click', async () => {
       useFrontCamera = !useFrontCamera;
       if (isCameraOn) {
-        // หยุดกล้องเก่าแล้วเริ่มกล้องใหม่ทันที
         if (stream) {
           stream.getTracks().forEach(track => track.stop());
           stream = null;
