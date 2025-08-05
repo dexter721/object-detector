@@ -1,46 +1,82 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>AI Object Detector with Voice</title>
   <style>
     body { text-align: center; font-family: sans-serif; }
     video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
     canvas { display: none; }
+    button {
+      font-size: 16px;
+      padding: 8px 16px;
+      margin: 10px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
   <video id="webcam" autoplay muted></video>
   <canvas id="canvas"></canvas>
-  <p id="label">กำลังโหลดโมเดล...</p>
+  <p id="label">กรุณากดเปิดกล้องเพื่อเริ่มใช้งาน</p>
+  <button id="toggleCamBtn">เปิดกล้อง</button>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <script>
     const video = document.getElementById('webcam');
     const label = document.getElementById('label');
+    const toggleCamBtn = document.getElementById('toggleCamBtn');
+
     let model;
+    let stream = null;
+    let isCameraOn = false;
+    let detecting = false;
+
+    // เก็บข้อมูลวัตถุและเวลาที่พูดล่าสุด
     let lastSpoken = '';
+    let lastSpokenTime = 0;
 
     async function setupCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false
-      });
-      video.srcObject = stream;
-      return new Promise(resolve => {
-        video.onloadedmetadata = () => resolve(video);
-      });
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false
+        });
+        video.srcObject = stream;
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => resolve(video);
+        });
+      } catch (err) {
+        alert("ไม่สามารถเข้าถึงกล้องได้: " + err.message);
+        throw err;
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
     }
 
     function speak(text) {
-      if (text !== lastSpoken) {
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = "th-TH"; // ให้เสียงเป็นภาษาไทย
-        speechSynthesis.speak(utter);
-        lastSpoken = text;
+      const now = Date.now();
+      // ถ้าวัตถุเดียวกันและยังไม่ครบ 10 วินาที ไม่พูดซ้ำ
+      if (text === lastSpoken && (now - lastSpokenTime) < 10000) {
+        return;
       }
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel(); // ยกเลิกเสียงที่กำลังพูดอยู่ก่อน
+      }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "th-TH";
+      speechSynthesis.speak(utter);
+
+      lastSpoken = text;
+      lastSpokenTime = now;
     }
 
     // แปลชื่อวัตถุเป็นภาษาไทย
@@ -49,10 +85,12 @@
       "bottle": "ขวดน้ำ",
       "banana": "กล้วย",
       "sports ball": "ลูกบอล"
-      // เพิ่มตามต้องการ
+      // เพิ่มเติมตามต้องการ
     };
 
     async function detectFrame() {
+      if (!detecting) return;
+
       const predictions = await model.detect(video);
 
       if (predictions.length > 0) {
@@ -73,15 +111,51 @@
       requestAnimationFrame(detectFrame);
     }
 
-    async function main() {
-      await setupCamera();
-      video.play();
-      model = await cocoSsd.load();
+    async function startDetection() {
+      if (!model) {
+        label.textContent = "กำลังโหลดโมเดล...";
+        model = await cocoSsd.load();
+      }
       label.textContent = "พร้อมตรวจจับแล้ว!";
+      detecting = true;
       detectFrame();
     }
 
-    main();
+    async function startCamera() {
+      if (isCameraOn) return;
+      try {
+        await setupCamera();
+        video.play();
+        isCameraOn = true;
+        toggleCamBtn.textContent = "ปิดกล้อง";
+        await startDetection();
+      } catch {
+        // error จัดการไว้ใน setupCamera แล้ว
+      }
+    }
+
+    function stopDetection() {
+      detecting = false;
+      lastSpoken = '';
+      lastSpokenTime = 0;
+      label.textContent = "กล้องถูกปิด";
+    }
+
+    function stopCameraAndDetection() {
+      if (!isCameraOn) return;
+      stopDetection();
+      stopCamera();
+      isCameraOn = false;
+      toggleCamBtn.textContent = "เปิดกล้อง";
+    }
+
+    toggleCamBtn.addEventListener('click', () => {
+      if (isCameraOn) {
+        stopCameraAndDetection();
+      } else {
+        startCamera();
+      }
+    });
   </script>
 </body>
 </html>
