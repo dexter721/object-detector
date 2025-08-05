@@ -34,10 +34,9 @@
     let isCameraOn = false;
     let detecting = false;
 
-    let lastDetectedObject = '';
     const lastSpokenTimes = {};
 
-    // แปลชื่อวัตถุเป็นภาษาไทย (ตัวอย่างบางคำตาม COCO)
+    // แปลชื่อวัตถุเป็นภาษาไทย
     const labelDict = {
       "dining table": "โต๊ะ",
       "chair": "เก้าอี้",
@@ -126,7 +125,7 @@
     function canSpeak(objectName) {
       const now = Date.now();
       if (!lastSpokenTimes[objectName]) return true;
-      return (now - lastSpokenTimes[objectName]) >= 10000;
+      return (now - lastSpokenTimes[objectName]) >= 5000; // 5 วินาที
     }
 
     async function setupCamera() {
@@ -174,29 +173,16 @@
           label.textContent = thaiName ? `พบวัตถุ: ${thaiName}` : `พบวัตถุ: ${name}`;
 
           if (thaiName && allowedSpeakWords.has(thaiName)) {
-            if (name !== lastDetectedObject) {
-              if (canSpeak(name)) {
-                speak(thaiName);
-                lastSpokenTimes[name] = Date.now();
-              }
-              lastDetectedObject = name;
-            } else {
-              if (canSpeak(name)) {
-                speak(thaiName);
-                lastSpokenTimes[name] = Date.now();
-              }
+            if (canSpeak(name)) {
+              speak(thaiName);
+              lastSpokenTimes[name] = Date.now();
             }
-          } else {
-            // ไม่พูดและไม่อัพเดต lastDetectedObject ถ้าไม่อยู่ใน allowedSpeakWords
-            lastDetectedObject = '';
           }
         } else {
           label.textContent = "พบวัตถุ: คน (ไม่พูด)";
-          lastDetectedObject = '';
         }
       } else {
         label.textContent = "ไม่พบวัตถุ";
-        lastDetectedObject = '';
       }
 
       requestAnimationFrame(detectFrame);
@@ -228,7 +214,6 @@
     function stopDetection() {
       detecting = false;
       label.textContent = "กล้องถูกปิด";
-      lastDetectedObject = '';
     }
 
     function stopCameraAndDetection() {
