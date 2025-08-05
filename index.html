@@ -1,51 +1,169 @@
-let lastSpoken = '';
-let lastSpokenTime = 0;
-let lastDetectedObject = '';
-
-function speak(text) {
-  const now = Date.now();
-
-  // ถ้าวัตถุไม่เปลี่ยน หรือยังไม่ครบ 10 วินาที ไม่พูดซ้ำ
-  if (text === lastSpoken && (now - lastSpokenTime) < 10000) {
-    return;
-  }
-  if (speechSynthesis.speaking) {
-    // ถ้าเสียงกำลังพูดอยู่ รอจบก่อน (ไม่ cancel)
-    return;
-  }
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = "th-TH";
-  speechSynthesis.speak(utter);
-
-  lastSpoken = text;
-  lastSpokenTime = now;
-}
-
-async function detectFrame() {
-  if (!detecting) return;
-
-  const predictions = await model.detect(video);
-
-  if (predictions.length > 0) {
-    const name = predictions[0].class;
-
-    if (name !== "person") {
-      if (name !== lastDetectedObject) {
-        lastDetectedObject = name;
-        const thaiName = labelDict[name] || name;
-        label.textContent = `พบวัตถุ: ${thaiName}`;
-        speak(thaiName);
-      } else {
-        speak(labelDict[name] || name);
-      }
-    } else {
-      label.textContent = "พบวัตถุ: คน (ไม่พูด)";
-      lastDetectedObject = '';
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Object Detector with Voice</title>
+  <style>
+    body { text-align: center; font-family: sans-serif; }
+    video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; }
+    canvas { display: none; }
+    button {
+      font-size: 16px;
+      padding: 8px 16px;
+      margin: 10px;
+      cursor: pointer;
     }
-  } else {
-    label.textContent = "ไม่พบวัตถุ";
-    lastDetectedObject = '';
-  }
+  </style>
+</head>
+<body>
+  <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
+  <video id="webcam" autoplay muted></video>
+  <canvas id="canvas"></canvas>
+  <p id="label">กรุณากดเปิดกล้องเพื่อเริ่มใช้งาน</p>
+  <button id="toggleCamBtn">เปิดกล้อง</button>
 
-  requestAnimationFrame(detectFrame);
-}
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <script>
+    const video = document.getElementById('webcam');
+    const label = document.getElementById('label');
+    const toggleCamBtn = document.getElementById('toggleCamBtn');
+
+    let model;
+    let stream = null;
+    let isCameraOn = false;
+    let detecting = false;
+
+    let lastSpoken = '';
+    let lastSpokenTime = 0;
+    let lastDetectedObject = '';
+
+    async function setupCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false
+        });
+        video.srcObject = stream;
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => resolve(video);
+        });
+      } catch (err) {
+        alert("ไม่สามารถเข้าถึงกล้องได้: " + err.message);
+        throw err;
+      }
+    }
+
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+    }
+
+    function speak(text) {
+      const now = Date.now();
+
+      // ถ้าวัตถุไม่เปลี่ยน หรือยังไม่ครบ 10 วินาที ไม่พูดซ้ำ
+      if (text === lastSpoken && (now - lastSpokenTime) < 10000) {
+        return;
+      }
+      if (speechSynthesis.speaking) {
+        // ถ้าเสียงกำลังพูดอยู่ รอให้จบก่อน (ไม่ cancel)
+        return;
+      }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = "th-TH";
+      speechSynthesis.speak(utter);
+
+      lastSpoken = text;
+      lastSpokenTime = now;
+    }
+
+    const labelDict = {
+      "apple": "แอปเปิล",
+      "bottle": "ขวดน้ำ",
+      "banana": "กล้วย",
+      "sports ball": "ลูกบอล"
+      // เพิ่มเติมได้ตามต้องการ
+    };
+
+    async function detectFrame() {
+      if (!detecting) return;
+
+      const predictions = await model.detect(video);
+
+      if (predictions.length > 0) {
+        const name = predictions[0].class;
+
+        if (name !== "person") {
+          if (name !== lastDetectedObject) {
+            lastDetectedObject = name;
+            const thaiName = labelDict[name] || name;
+            label.textContent = `พบวัตถุ: ${thaiName}`;
+            speak(thaiName);
+          } else {
+            speak(labelDict[name] || name);
+          }
+        } else {
+          label.textContent = "พบวัตถุ: คน (ไม่พูด)";
+          lastDetectedObject = '';
+        }
+      } else {
+        label.textContent = "ไม่พบวัตถุ";
+        lastDetectedObject = '';
+      }
+
+      requestAnimationFrame(detectFrame);
+    }
+
+    async function startDetection() {
+      if (!model) {
+        label.textContent = "กำลังโหลดโมเดล...";
+        model = await cocoSsd.load();
+      }
+      label.textContent = "พร้อมตรวจจับแล้ว!";
+      detecting = true;
+      detectFrame();
+    }
+
+    async function startCamera() {
+      if (isCameraOn) return;
+      try {
+        await setupCamera();
+        video.play();
+        isCameraOn = true;
+        toggleCamBtn.textContent = "ปิดกล้อง";
+        await startDetection();
+      } catch {
+        // error จัดการไว้ใน setupCamera แล้ว
+      }
+    }
+
+    function stopDetection() {
+      detecting = false;
+      lastSpoken = '';
+      lastSpokenTime = 0;
+      lastDetectedObject = '';
+      label.textContent = "กล้องถูกปิด";
+    }
+
+    function stopCameraAndDetection() {
+      if (!isCameraOn) return;
+      stopDetection();
+      stopCamera();
+      isCameraOn = false;
+      toggleCamBtn.textContent = "เปิดกล้อง";
+    }
+
+    toggleCamBtn.addEventListener('click', () => {
+      if (isCameraOn) {
+        stopCameraAndDetection();
+      } else {
+        startCamera();
+      }
+    });
+  </script>
+</body>
+</html>
