@@ -169,10 +169,11 @@
         const name = predictions[0].class;
 
         if (name !== "person") {
-          const thaiName = labelDict[name] || name;
-          label.textContent = `พบวัตถุ: ${thaiName}`;
+          const thaiName = labelDict[name] || null;
 
-          if (allowedSpeakWords.has(thaiName)) {
+          label.textContent = thaiName ? `พบวัตถุ: ${thaiName}` : `พบวัตถุ: ${name}`;
+
+          if (thaiName && allowedSpeakWords.has(thaiName)) {
             if (name !== lastDetectedObject) {
               if (canSpeak(name)) {
                 speak(thaiName);
@@ -186,7 +187,7 @@
               }
             }
           } else {
-            // ไม่อยู่ใน allowedSpeakWords => ไม่พูด
+            // ไม่พูดและไม่อัพเดต lastDetectedObject ถ้าไม่อยู่ใน allowedSpeakWords
             lastDetectedObject = '';
           }
         } else {
