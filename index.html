@@ -24,28 +24,32 @@
 
     const labelDict = {
       "chair": "เก้าอี้",
-      "couch": "โซฟา", // ถ้ามีเตียงในโมเดลให้ใช้ bed แทน
+      "couch": "โซฟา",
       "bed": "เตียง",
       "dining table": "โต๊ะ",
       "tv": "ทีวี",
       "cell phone": "โทรศัพท์",
       "book": "หนังสือ",
-      "bottle": "ขวด",
+      "bottle": "ขวดน้ำ",
       "cup": "ถ้วย",
       "bowl": "ชาม",
       "remote": "รีโมท",
       "mouse": "เมาส์",
       "keyboard": "คีย์บอร์ด",
       "laptop": "โน้ตบุ๊ก",
-      "computer": "คอมพิวเตอร์", // coco-ssd ไม่มี label นี้
-      "microwave": "ไมโครเวฟ", // แทน หม้อ/กระทะ
+      "microwave": "ไมโครเวฟ",
       "sports ball": "ลูกบอล",
       "scissors": "กรรไกร",
-      "backpack": "กระเป๋า", 
-      "teddy bear": "ตุ๊กตา"
+      "backpack": "กระเป๋า",
+      "teddy bear": "ตุ๊กตา",
+      "pen": "ปากกา",         // เพิ่ม
+      "pencil": "ดินสอ",      // เพิ่ม
+      "eraser": "ยางลบ",       // เพิ่ม
+      "headphones": "หูฟัง",   // เพิ่ม
+      "box": "กล่อง"          // เพิ่ม
     };
 
-    let lastSpokenTimes = {}; // บันทึกเวลาแต่ละวัตถุที่พูดล่าสุด
+    let lastSpokenTimes = {};
 
     async function setupCamera() {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -82,7 +86,7 @@
               label.textContent = `พบวัตถุ: ${thaiName} (รอพูดใหม่)`;
             }
             found = true;
-            break; // พูดทีละชิ้นพอ
+            break;
           }
         }
 
