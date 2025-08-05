@@ -190,8 +190,17 @@
         } else {
           labelDetected.innerText = "พบวัตถุ: " + label + " (ไม่มีคำแปลไทย)";
         }
+
+        // เคลียร์ข้อความไม่พบวัตถุ เพื่อให้พูดใหม่ได้เมื่อไม่เจอ
+        delete lastSpoken['not_found'];
+
       } else {
         labelDetected.innerText = "ไม่พบวัตถุ";
+        const now = Date.now();
+        if (!lastSpoken['not_found'] || now - lastSpoken['not_found'] > speakCooldown) {
+          speak("ไม่พบวัตถุ");
+          lastSpoken['not_found'] = now;
+        }
       }
 
       if (isCameraOn) {
