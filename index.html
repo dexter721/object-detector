@@ -34,8 +34,19 @@
     let isCameraOn = false;
     let detecting = false;
 
-    // เก็บเวลาพูดล่าสุดของแต่ละวัตถุเป็น Object
+    // เก็บชื่อวัตถุที่ตรวจจับได้ล่าสุดในเฟรมก่อนหน้า
+    let lastDetectedObject = '';
+
+    // เก็บเวลาที่พูดวัตถุแต่ละตัว (เป็นวินาที) 
     const lastSpokenTimes = {};
+
+    // เวลาเป็นมิลลิวินาที (Date.now())
+    function canSpeak(objectName) {
+      const now = Date.now();
+      if (!lastSpokenTimes[objectName]) return true; // ไม่เคยพูดเลย -> พูดได้
+      const elapsed = now - lastSpokenTimes[objectName];
+      return elapsed >= 10000; // ผ่าน 10 วิ ถึงจะพูดใหม่
+    }
 
     async function setupCamera() {
       try {
@@ -62,24 +73,13 @@
     }
 
     function speak(text) {
-      const now = Date.now();
-
-      // ถ้าเคยพูดมาก่อนและยังไม่ครบ 10 วินาที หยุดไม่พูดซ้ำ
-      if (lastSpokenTimes[text] && (now - lastSpokenTimes[text]) < 10000) {
-        return;
-      }
-
       if (speechSynthesis.speaking) {
-        // ถ้าเสียงกำลังพูดอยู่ รอให้จบก่อน (ไม่ cancel)
+        // ถ้าเสียงกำลังพูดอยู่ รอให้จบก่อน
         return;
       }
-
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "th-TH";
       speechSynthesis.speak(utter);
-
-      // บันทึกเวลาพูดล่าสุดของวัตถุตัวนี้
-      lastSpokenTimes[text] = now;
     }
 
     const labelDict = {
@@ -101,12 +101,34 @@
         if (name !== "person") {
           const thaiName = labelDict[name] || name;
           label.textContent = `พบวัตถุ: ${thaiName}`;
-          speak(thaiName);
+
+          if (name !== lastDetectedObject) {
+            // เจอวัตถุตัวใหม่ที่ต่างจากตัวก่อนหน้า
+            if (canSpeak(name)) {
+              speak(thaiName);
+              lastSpokenTimes[name] = Date.now();
+            }
+            lastDetectedObject = name;
+
+          } else {
+            // วัตถุตัวเดิมที่เจอซ้ำในเฟรมนี้
+            // ถ้ายังไม่ครบ 10 วิ ไม่พูดซ้ำ
+            // แต่ถ้าครบ 10 วิ ให้พูดซ้ำ และอัพเดตเวลา
+            if (canSpeak(name)) {
+              speak(thaiName);
+              lastSpokenTimes[name] = Date.now();
+            }
+            // ไม่เปลี่ยน lastDetectedObject เพราะเหมือนเดิม
+          }
+
         } else {
           label.textContent = "พบวัตถุ: คน (ไม่พูด)";
+          lastDetectedObject = '';
         }
+
       } else {
         label.textContent = "ไม่พบวัตถุ";
+        lastDetectedObject = '';
       }
 
       requestAnimationFrame(detectFrame);
@@ -138,8 +160,7 @@
     function stopDetection() {
       detecting = false;
       label.textContent = "กล้องถูกปิด";
-      // เคลียร์เวลาพูดทั้งหมด (ถ้าต้องการเก็บไว้ก็ไม่ต้องเคลียร์)
-      // Object.keys(lastSpokenTimes).forEach(key => delete lastSpokenTimes[key]);
+      lastDetectedObject = '';
     }
 
     function stopCameraAndDetection() {
