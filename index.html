@@ -34,9 +34,8 @@
     let isCameraOn = false;
     let detecting = false;
 
-    let lastSpoken = '';
-    let lastSpokenTime = 0;
-    let lastDetectedObject = '';
+    // เก็บเวลาพูดล่าสุดของแต่ละวัตถุเป็น Object
+    const lastSpokenTimes = {};
 
     async function setupCamera() {
       try {
@@ -65,20 +64,22 @@
     function speak(text) {
       const now = Date.now();
 
-      // ถ้าวัตถุไม่เปลี่ยน หรือยังไม่ครบ 10 วินาที ไม่พูดซ้ำ
-      if (text === lastSpoken && (now - lastSpokenTime) < 10000) {
+      // ถ้าเคยพูดมาก่อนและยังไม่ครบ 10 วินาที หยุดไม่พูดซ้ำ
+      if (lastSpokenTimes[text] && (now - lastSpokenTimes[text]) < 10000) {
         return;
       }
+
       if (speechSynthesis.speaking) {
         // ถ้าเสียงกำลังพูดอยู่ รอให้จบก่อน (ไม่ cancel)
         return;
       }
+
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = "th-TH";
       speechSynthesis.speak(utter);
 
-      lastSpoken = text;
-      lastSpokenTime = now;
+      // บันทึกเวลาพูดล่าสุดของวัตถุตัวนี้
+      lastSpokenTimes[text] = now;
     }
 
     const labelDict = {
@@ -98,21 +99,14 @@
         const name = predictions[0].class;
 
         if (name !== "person") {
-          if (name !== lastDetectedObject) {
-            lastDetectedObject = name;
-            const thaiName = labelDict[name] || name;
-            label.textContent = `พบวัตถุ: ${thaiName}`;
-            speak(thaiName);
-          } else {
-            speak(labelDict[name] || name);
-          }
+          const thaiName = labelDict[name] || name;
+          label.textContent = `พบวัตถุ: ${thaiName}`;
+          speak(thaiName);
         } else {
           label.textContent = "พบวัตถุ: คน (ไม่พูด)";
-          lastDetectedObject = '';
         }
       } else {
         label.textContent = "ไม่พบวัตถุ";
-        lastDetectedObject = '';
       }
 
       requestAnimationFrame(detectFrame);
@@ -143,10 +137,9 @@
 
     function stopDetection() {
       detecting = false;
-      lastSpoken = '';
-      lastSpokenTime = 0;
-      lastDetectedObject = '';
       label.textContent = "กล้องถูกปิด";
+      // เคลียร์เวลาพูดทั้งหมด (ถ้าต้องการเก็บไว้ก็ไม่ต้องเคลียร์)
+      // Object.keys(lastSpokenTimes).forEach(key => delete lastSpokenTimes[key]);
     }
 
     function stopCameraAndDetection() {
