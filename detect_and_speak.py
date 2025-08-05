@@ -3,6 +3,8 @@ import torch
 from gtts import gTTS
 import os
 import time
+from playsound import playsound
+import threading
 
 # โหลดโมเดล YOLOv5n (Nano – เบาและเร็ว)
 model = torch.hub.load('yolov5', 'yolov5n', source='local')
@@ -26,6 +28,10 @@ label_dict = {
 # เก็บเวลาพูดครั้งล่าสุดของแต่ละวัตถุ
 last_spoken = {}
 
+# ฟังก์ชันเล่นเสียงแบบไม่บล็อก
+def play_sound(file):
+    threading.Thread(target=playsound, args=(file,), daemon=True).start()
+
 while True:
     ret, frame = cap.read()
     if not ret:
@@ -41,8 +47,8 @@ while True:
 
         for *box, conf, cls in detections:
             label = labels[int(cls)]
-            
-            # ไม่แสดงกรอบ, ไม่พูด person
+
+            # พูดเฉพาะวัตถุที่อยู่ใน label_dict เท่านั้น
             if label in label_dict:
                 current_time = time.time()
                 last_time = last_spoken.get(label, 0)
@@ -53,7 +59,7 @@ while True:
                     print(f'พูดว่า: {speak_label}')
                     tts = gTTS(text=speak_label, lang='th')
                     tts.save('speak.mp3')
-                    os.system('start speak.mp3')
+                    play_sound('speak.mp3')
                     last_spoken[label] = current_time
 
     cv2.imshow('Object Detection 720p', frame)
