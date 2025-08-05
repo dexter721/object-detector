@@ -37,12 +37,11 @@
     let stream = null;
     let isCameraOn = false;
     let detecting = false;
-    let useFrontCamera = false;  // false = กล้องหลัง, true = กล้องหน้า
+    let useFrontCamera = false;
     let lastSpokenTimes = {};
-    const speakCooldownMs = 3000; // 3 วินาที
-    let speechVolume = 1.0; // เริ่มต้น 100%
+    const speakCooldownMs = 3000;
+    let speechVolume = 1.0;
 
-    // รายการวัตถุที่พูดได้และแปลไทย
     const labelDict = {
       "chair": "เก้าอี้",
       "couch": "โซฟา",
@@ -89,7 +88,6 @@
         stream.getTracks().forEach(track => track.stop());
         stream = null;
       }
-
       const constraints = {
         video: { facingMode: useFrontCamera ? "user" : "environment" },
         audio: false
@@ -107,8 +105,6 @@
     }
 
     function speak(text) {
-      if (!labelDictReverse[text]) return; // ป้องกันพูดคำที่ไม่มีในรายการ
-
       if (speechSynthesis.speaking) {
         speechSynthesis.cancel();
       }
@@ -116,12 +112,6 @@
       utter.lang = "th-TH";
       utter.volume = speechVolume;
       speechSynthesis.speak(utter);
-    }
-
-    // สร้าง reverse dict สำหรับเช็ค speak() ให้แม่นยำ
-    const labelDictReverse = {};
-    for (const key in labelDict) {
-      labelDictReverse[labelDict[key]] = true;
     }
 
     async function detectFrame() {
@@ -143,10 +133,10 @@
               speak(thaiName);
               lastSpokenTimes[thaiName] = now;
             } else {
-              label.textContent = `พบวัตถุ: ${thaiName} (รอพูดใหม่)`;
+              label.textContent = `พบวัตถุ: ${thaiName}`;
             }
             foundObject = true;
-            break; // พูดแค่วัตถุเดียวในแต่ละรอบ
+            break;
           }
         }
         if (!foundObject) {
@@ -178,7 +168,7 @@
         toggleCamBtn.textContent = "ปิดกล้อง";
         await startDetection();
       } catch {
-        // จัดการ error ไว้แล้วใน setupCamera
+        // error handled in setupCamera
       }
     }
 
@@ -222,7 +212,6 @@
       speechVolume = volPercent / 100;
     });
 
-    // เปิดกล้องและเริ่มตรวจจับทันทีเมื่อโหลดเว็บ
     (async () => {
       await startCamera();
     })();
