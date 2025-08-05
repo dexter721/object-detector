@@ -2,110 +2,109 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>ระบบตรวจจับวัตถุพร้อมเสียงภาษาไทย</title>
+  <title>AI Object Detector with Voice (Thai Only)</title>
   <style>
     body {
-      font-family: sans-serif;
       text-align: center;
-      padding: 20px;
+      font-family: sans-serif;
     }
     video {
       border: 2px solid black;
       width: 80%;
       max-width: 640px;
-      margin: 10px 0;
+      margin: 10px auto;
     }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      margin: 5px;
-      cursor: pointer;
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #controls {
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <h1>ระบบตรวจจับวัตถุพร้อมเสียงภาษาไทย</h1>
-
-  <video id="video" autoplay muted></video>
-  <div>
-    <button onclick="toggleCamera()">เปิด/ปิดกล้อง</button>
-    <button onclick="changeVolume(0.1)">เพิ่มเสียง</button>
-    <button onclick="changeVolume(-0.1)">ลดเสียง</button>
+  <h1>ระบบช่วยเรียนรู้วัตถุสำหรับเด็ก</h1>
+  <video id="video" autoplay muted playsinline></video>
+  <div id="controls">
+    <button onclick="toggleCamera()">เปิด/ปิด กล้อง</button>
+    <label for="volumeRange">ระดับเสียง:</label>
+    <input type="range" id="volumeRange" min="0" max="1" step="0.01" value="1" onchange="setVolume(this.value)">
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-
   <script>
-    const video = document.getElementById('video');
-    let stream = null;
+    let video = document.getElementById('video');
+    let model;
     let isCameraOn = false;
-    let volume = 1.0;
+    let volume = 1;
+    let lastSpoken = {};
+    const speakCooldown = 3000; // 3 วินาที
 
-    // รายชื่อวัตถุที่แปลเป็นภาษาไทยเท่านั้น
-    const labelMap = {
-      "chair": "เก้าอี้",
-      "bed": "เตียง",
-      "couch": "โซฟา",
-      "tv": "ทีวี",
-      "remote": "รีโมท",
-      "cell phone": "โทรศัพท์",
-      "book": "หนังสือ",
-      "cup": "ถ้วย",
-      "bottle": "ขวด",
-      "bowl": "จาน",
-      "spoon": "ช้อน",
-      "fork": "ส้อม",
-      "keyboard": "คีย์บอร์ด",
-      "mouse": "เมาส์",
-      "laptop": "โน้ตบุ๊ก",
-      "backpack": "กระเป๋า",
-      "handbag": "กระเป๋า",
-      "scissors": "กรรไกร",
-      "toothbrush": "แปรงสีฟัน",
-      "potted plant": "ต้นไม้",
-      "dining table": "โต๊ะ",
-      "microwave": "ไมโครเวฟ",
-      "oven": "เตาอบ",
-      "sink": "อ่างล้างจาน",
-      "refrigerator": "ตู้เย็น",
-      "teddy bear": "ตุ๊กตา",
-      "sports ball": "ลูกบอล",
-      "toy": "ของเล่น",
-      "computer": "คอมพิวเตอร์",
-      "pen": "ปากกา",
-      "pencil": "ดินสอ",
-      "eraser": "ยางลบ",
-      "headphones": "หูฟัง",
-      "box": "กล่อง"
+    const THAI_LABELS = {
+      'chair': 'เก้าอี้',
+      'bed': 'เตียง',
+      'couch': 'โซฟา',
+      'tv': 'ทีวี',
+      'cell phone': 'โทรศัพท์',
+      'bottle': 'ขวด',
+      'book': 'หนังสือ',
+      'cup': 'แก้ว',
+      'bowl': 'ถ้วย',
+      'dining table': 'โต๊ะ',
+      'remote': 'รีโมท',
+      'keyboard': 'คีย์บอร์ด',
+      'mouse': 'เมาส์',
+      'laptop': 'โน้ตบุ๊ก',
+      'microwave': 'ไมโครเวฟ',
+      'oven': 'เตาอบ',
+      'sink': 'อ่างล้างจาน',
+      'refrigerator': 'ตู้เย็น',
+      'backpack': 'กระเป๋า',
+      'handbag': 'กระเป๋าถือ',
+      'suitcase': 'กระเป๋าเดินทาง',
+      'scissors': 'กรรไกร',
+      'toothbrush': 'แปรงสีฟัน',
+      'hair drier': 'ไดร์เป่าผม',
+      'toilet': 'โถส้วม',
+      'mirror': 'กระจก',
+      'pen': 'ปากกา',
+      'pencil': 'ดินสอ',
+      'eraser': 'ยางลบ',
+      'headphones': 'หูฟัง',
+      'box': 'กล่อง',
+      'computer': 'คอมพิวเตอร์',
+      'tablet': 'แท็บเล็ต',
+      'printer': 'เครื่องพิมพ์',
+      'microphone': 'ไมโครโฟน',
+      'charger': 'สายชาร์จ',
+      'power bank': 'พาวเวอร์แบงก์',
+      'fork': 'ส้อม',
+      'spoon': 'ช้อน',
+      'plate': 'จาน',
+      'pillow': 'หมอน',
+      'doll': 'ตุ๊กตา',
+      'ball': 'ลูกบอล',
+      'toy car': 'รถของเล่น',
+      'robot': 'หุ่นยนต์',
+      'board': 'กระดาน',
+      'pan': 'กระทะ',
+      'pot': 'หม้อ',
+      'notebook': 'สมุด',
+      // เพิ่มได้ตามต้องการ
     };
-
-    const spokenLabels = {};
-    const speakDelay = 3000; // 3 วินาที
 
     function speak(text) {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "th-TH";
+      utterance.lang = 'th-TH';
       utterance.volume = volume;
       speechSynthesis.speak(utterance);
     }
 
-    async function startCamera() {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        isCameraOn = true;
-      } catch (err) {
-        alert("ไม่สามารถเปิดกล้องได้: " + err.message);
-      }
-    }
-
-    function stopCamera() {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        video.srcObject = null;
-        isCameraOn = false;
-      }
+    function setVolume(val) {
+      volume = parseFloat(val);
+      console.log("ระดับเสียง:", volume);
     }
 
     function toggleCamera() {
@@ -116,32 +115,48 @@
       }
     }
 
-    function changeVolume(delta) {
-      volume = Math.min(1, Math.max(0, volume + delta));
-      console.log("ระดับเสียง:", volume);
+    function startCamera() {
+      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+        video.srcObject = stream;
+        isCameraOn = true;
+        detectFrame();
+      }).catch(err => {
+        console.error("ไม่สามารถเปิดกล้องได้", err);
+      });
     }
 
-    // โหลดโมเดลและเริ่มตรวจจับ
-    cocoSsd.load().then(model => {
-      console.log("โมเดลโหลดเสร็จแล้ว");
+    function stopCamera() {
+      let stream = video.srcObject;
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      video.srcObject = null;
+      isCameraOn = false;
+    }
 
-      setInterval(async () => {
-        if (!isCameraOn) return;
-        const predictions = await model.detect(video);
-
+    async function detectFrame() {
+      if (!model) return;
+      model.detect(video).then(predictions => {
         predictions.forEach(prediction => {
-          const engLabel = prediction.class;
-          const thaiLabel = labelMap[engLabel];
-
+          const label = prediction.class;
+          const now = Date.now();
+          const thaiLabel = THAI_LABELS[label];
           if (thaiLabel) {
-            const now = Date.now();
-            if (!spokenLabels[thaiLabel] || now - spokenLabels[thaiLabel] > speakDelay) {
+            if (!lastSpoken[label] || now - lastSpoken[label] > speakCooldown) {
               speak(thaiLabel);
-              spokenLabels[thaiLabel] = now;
+              lastSpoken[label] = now;
             }
           }
         });
-      }, 500);
+        if (isCameraOn) {
+          requestAnimationFrame(detectFrame);
+        }
+      });
+    }
+
+    cocoSsd.load().then(loadedModel => {
+      model = loadedModel;
+      console.log("โมเดลโหลดเสร็จแล้ว");
     });
   </script>
 </body>
