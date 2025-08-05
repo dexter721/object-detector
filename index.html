@@ -50,8 +50,8 @@
     let isCameraOn = false;
     let detecting = false;
     let lastSpokenTimes = {};
-    let currentFacingMode = "environment"; // เริ่มกล้องหลัง
-    let speechVolume = 1.0; // ค่าระหว่าง 0 ถึง 1
+    let currentFacingMode = "environment";
+    let speechVolume = 1.0;
 
     const labelDict = {
       "chair": "เก้าอี้",
@@ -130,7 +130,7 @@
           const name = prediction.class;
           if (labelDict[name]) {
             const thaiName = labelDict[name];
-            label.textContent = พบวัตถุ: ${thaiName};
+            label.textContent = `พบวัตถุ: ${thaiName}`;
             speak(thaiName);
             found = true;
             break;
@@ -206,7 +206,6 @@
       controls.style.display = "block";
 
       await unlockAudio();
-
       await startCameraAndDetect();
       isCameraOn = true;
       toggleCamBtn.textContent = "ปิดกล้อง";
