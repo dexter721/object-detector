@@ -1,71 +1,47 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <title>AI Object Detector with Voice (Full Features)</title>
+  <title>AI Object Detector with Thai Voice</title>
   <style>
-    body { font-family: sans-serif; text-align: center; margin: 20px; }
-    video { border: 2px solid black; width: 80%; max-width: 640px; margin: 10px auto; display: block; }
-    #controls { margin-top: 10px; }
-    button, label, select { font-size: 16px; margin: 5px; }
-    #volumeValue { font-weight: bold; }
-    #message { color: red; margin: 10px; font-weight: bold; }
+    body { text-align: center; font-family: sans-serif; margin: 0; padding: 10px; }
+    video { width: 90%; max-width: 640px; margin: 10px auto; display: block; }
+    canvas { display: none; }
+    select, button, input[type=range] {
+      margin: 5px; padding: 5px; font-size: 16px;
+    }
+    #mirrorToggle { display: none; }
   </style>
 </head>
 <body>
+  <h1>ระบบช่วยเรียนรู้วัตถุด้วยเสียง (AI)</h1>
+  <video id="video" autoplay playsinline></video>
+  <br />
+  <select id="cameraSelect"></select>
+  <button onclick="toggleMirror()">เปลี่ยนโหมดกระจก</button>
+  <button onclick="toggleDetection()">เลิกตรวจจับ</button>
+  <button onclick="toggleSpeech()">ปิดเสียง</button>
+  <input type="range" id="volumeControl" min="0" max="1" step="0.1" value="1" />
+  <canvas id="canvas"></canvas>
 
-  <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
-
-  <div id="startScreen">
-    <button id="startBtn" style="font-size:24px; padding: 15px 30px;">เริ่มใช้งาน</button>
-    <p>โปรดกดปุ่มเพื่อเปิดกล้องและอนุญาตเสียงพูด</p>
-  </div>
-
-  <p id="message"></p>
-
-  <video id="webcam" autoplay muted playsinline style="display:none;"></video>
-
-  <div id="controls" style="display:none;">
-    <button id="toggleCamBtn">ปิดกล้อง</button>
-    <button id="switchCamBtn">สลับกล้อง</button>
-    <button id="toggleDetectBtn">หยุดตรวจจับ</button>
-    <button id="muteBtn">ปิดเสียงพูด</button><br />
-
-    <label for="cameraSelect">เลือกกล้อง: </label>
-    <select id="cameraSelect"></select><br />
-
-    <label for="volumeSlider">เสียงพูด: <span id="volumeValue">100</span>%</label><br />
-    <input type="range" id="volumeSlider" min="0" max="100" value="100" />
-  </div>
-
-  <p id="label"></p>
-
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
   <script>
-    const startBtn = document.getElementById('startBtn');
-    const startScreen = document.getElementById('startScreen');
-    const video = document.getElementById('webcam');
-    const controls = document.getElementById('controls');
-    const toggleCamBtn = document.getElementById('toggleCamBtn');
-    const switchCamBtn = document.getElementById('switchCamBtn');
-    const toggleDetectBtn = document.getElementById('toggleDetectBtn');
-    const muteBtn = document.getElementById('muteBtn');
-    const volumeSlider = document.getElementById('volumeSlider');
-    const volumeValue = document.getElementById('volumeValue');
-    const label = document.getElementById('label');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
     const cameraSelect = document.getElementById('cameraSelect');
-    const message = document.getElementById('message');
+    const volumeControl = document.getElementById('volumeControl');
 
     let model;
-    let stream = null;
-    let isCameraOn = false;
-    let detecting = true;
-    let isMuted = false;
-    let lastSpokenTimes = {};
-    let speechVolume = 1.0;
+    let stream;
     let currentDeviceId = null;
+    let isDetecting = true;
+    let isSpeaking = true;
+    let mirrorMode = false;
+    let lastSpoken = '';
+    let lastTime = 0;
 
     const labelDict = {
       "chair": "เก้าอี้",
@@ -75,7 +51,7 @@
       "tv": "ทีวี",
       "cell phone": "โทรศัพท์",
       "book": "หนังสือ",
-      "bottle": "ขวดน้ำ",
+      "bottle": "ขวด",
       "cup": "ถ้วย",
       "bowl": "ชาม",
       "remote": "รีโมท",
@@ -91,209 +67,119 @@
       "pencil": "ดินสอ",
       "eraser": "ยางลบ",
       "headphones": "หูฟัง",
-      "box": "กล่อง"
+      "box": "กล่อง",
+      "apple": "แอปเปิล",
+      "banana": "กล้วย",
+      "person": "คน"
     };
 
-    async function listCameras() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        cameraSelect.innerHTML = '';
-        videoDevices.forEach(device => {
-          const option = document.createElement('option');
-          option.value = device.deviceId;
-          option.text = device.label || `กล้อง ${cameraSelect.length + 1}`;
-          cameraSelect.appendChild(option);
-        });
-        if(videoDevices.length > 0) {
-          currentDeviceId = videoDevices[0].deviceId;
-          cameraSelect.value = currentDeviceId;
-        }
-      } catch (e) {
-        message.textContent = 'ไม่สามารถดึงรายชื่อกล้องได้: ' + e.message;
+    const speak = (text) => {
+      if (!isSpeaking) return;
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
       }
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'th-TH';
+      utter.volume = parseFloat(volumeControl.value);
+      speechSynthesis.speak(utter);
+    };
+
+    async function initCamera(deviceId = null) {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+
+      const constraints = {
+        audio: false,
+        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }
+      };
+
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+
+      video.style.transform = mirrorMode ? 'scaleX(-1)' : 'scaleX(1)';
     }
 
-    async function setupCamera(deviceId = null) {
-      try {
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-          stream = null;
-        }
-        const constraints = {
-          video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" },
-          audio: false
-        };
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-        return new Promise((resolve) => {
-          video.onloadedmetadata = () => resolve();
-        });
-      } catch (e) {
-        message.textContent = 'ไม่สามารถเปิดกล้องได้: ' + e.message;
-        throw e;
-      }
+    function toggleMirror() {
+      mirrorMode = !mirrorMode;
+      video.style.transform = mirrorMode ? 'scaleX(-1)' : 'scaleX(1)';
     }
 
-    async function unlockAudio() {
-      return new Promise((resolve) => {
-        const utter = new SpeechSynthesisUtterance('');
-        utter.volume = 0;
-        utter.lang = "th-TH";
-        utter.onend = () => resolve();
-        speechSynthesis.speak(utter);
+    function toggleDetection() {
+      isDetecting = !isDetecting;
+      alert(isDetecting ? "เริ่มตรวจจับแล้ว" : "หยุดตรวจจับแล้ว");
+    }
+
+    function toggleSpeech() {
+      isSpeaking = !isSpeaking;
+      alert(isSpeaking ? "เปิดเสียงแล้ว" : "ปิดเสียงแล้ว");
+    }
+
+    async function populateCameraOptions() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      cameraSelect.innerHTML = '';
+      devices.filter(d => d.kind === 'videoinput').forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.text = device.label || `กล้อง ${cameraSelect.length + 1}`;
+        cameraSelect.appendChild(option);
       });
-    }
-
-    function speak(text) {
-      if(isMuted) return;
-      const now = Date.now();
-      if (!lastSpokenTimes[text] || (now - lastSpokenTimes[text] > 3000)) {
-        if (speechSynthesis.speaking) {
-          speechSynthesis.cancel();
-        }
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = "th-TH";
-        utter.volume = speechVolume;
-        speechSynthesis.speak(utter);
-        lastSpokenTimes[text] = now;
+      if (cameraSelect.options.length > 0) {
+        currentDeviceId = cameraSelect.options[0].value;
+        cameraSelect.value = currentDeviceId;
       }
     }
+
+    cameraSelect.onchange = async () => {
+      currentDeviceId = cameraSelect.value;
+      await initCamera(currentDeviceId);
+    };
 
     async function detectFrame() {
-      if (!detecting) return;
-      try {
-        const predictions = await model.detect(video);
-        if (predictions.length > 0) {
-          let found = false;
-          for (const prediction of predictions) {
-            if (labelDict[prediction.class]) {
-              const thaiName = labelDict[prediction.class];
-              label.textContent = `พบวัตถุ: ${thaiName}`;
-              speak(thaiName);
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            label.textContent = "พบวัตถุที่ไม่มีคำแปลภาษาไทย (ไม่พูด)";
-          }
-        } else {
-          label.textContent = "กำลังตรวจจับวัตถุ...";
-        }
-      } catch (e) {
-        message.textContent = "เกิดข้อผิดพลาดในการตรวจจับ: " + e.message;
+      if (!model || !isDetecting) {
+        requestAnimationFrame(detectFrame);
+        return;
       }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const predictions = await model.detect(canvas);
+
+      const now = Date.now();
+      for (const pred of predictions) {
+        const label = pred.class;
+        if (labelDict[label]) {
+          if (label !== lastSpoken || now - lastTime > 5000) {
+            lastSpoken = label;
+            lastTime = now;
+            speak(labelDict[label]);
+            break;
+          }
+        }
+      }
+
       requestAnimationFrame(detectFrame);
     }
 
-    async function startCameraAndDetect(deviceId = null) {
-      message.textContent = '';
-      try {
-        await setupCamera(deviceId);
-        video.style.display = 'block';
-
-        // ตรวจว่ากล้องนี้เป็นกล้องหน้าไหม
-        const trackLabel = stream.getVideoTracks()[0].label.toLowerCase();
-        if(trackLabel.includes('front') || trackLabel.includes('user')) {
-          video.style.transform = 'scaleX(-1)';  // กล้องหน้า mirror
-        } else {
-          video.style.transform = 'none';
-        }
-
-        if (!model) {
-          label.textContent = "กำลังโหลดโมเดล...";
-          model = await cocoSsd.load();
-        }
-
-        label.textContent = "พร้อมตรวจจับวัตถุ!";
-        detecting = true;
-        detectFrame();
-        isCameraOn = true;
-        toggleCamBtn.textContent = "ปิดกล้อง";
-        toggleDetectBtn.textContent = "หยุดตรวจจับ";
-        muteBtn.textContent = isMuted ? 'เปิดเสียงพูด' : 'ปิดเสียงพูด';
-      } catch (e) {
-        console.error(e);
-      }
+    async function init() {
+      await populateCameraOptions();
+      await initCamera(currentDeviceId);
+      model = await cocoSsd.load();
+      detectFrame();
     }
 
-    function stopCameraAndDetect() {
-      detecting = false;
-      label.textContent = "";
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
-      video.srcObject = null;
-      video.style.display = 'none';
-      isCameraOn = false;
-      toggleCamBtn.textContent = "เปิดกล้อง";
-    }
+    window.onload = () => {
+      // ปลุกระบบพูดเพื่อไม่ให้บล็อกเสียงในบางเบราว์เซอร์
+      document.body.addEventListener('click', () => {
+        const dummy = new SpeechSynthesisUtterance('');
+        dummy.lang = 'th-TH';
+        speechSynthesis.speak(dummy);
+      }, { once: true });
 
-    toggleCamBtn.addEventListener('click', () => {
-      if (isCameraOn) {
-        stopCameraAndDetect();
-      } else {
-        startCameraAndDetect(currentDeviceId);
-      }
-    });
-
-    switchCamBtn.addEventListener('click', async () => {
-      // สลับกล้องในรายการเลือกกล้อง
-      const devices = [...cameraSelect.options];
-      let currentIndex = devices.findIndex(d => d.value === currentDeviceId);
-      let nextIndex = (currentIndex + 1) % devices.length;
-      cameraSelect.selectedIndex = nextIndex;
-      currentDeviceId = devices[nextIndex].value;
-      if(isCameraOn) {
-        startCameraAndDetect(currentDeviceId);
-      }
-    });
-
-    toggleDetectBtn.addEventListener('click', () => {
-      detecting = !detecting;
-      toggleDetectBtn.textContent = detecting ? 'หยุดตรวจจับ' : 'เริ่มตรวจจับ';
-      if(detecting) detectFrame();
-      else label.textContent = 'หยุดตรวจจับแล้ว';
-    });
-
-    muteBtn.addEventListener('click', () => {
-      isMuted = !isMuted;
-      muteBtn.textContent = isMuted ? 'เปิดเสียงพูด' : 'ปิดเสียงพูด';
-    });
-
-    volumeSlider.addEventListener('input', () => {
-      const val = volumeSlider.value;
-      volumeValue.textContent = val;
-      speechVolume = val / 100;
-    });
-
-    cameraSelect.addEventListener('change', () => {
-      currentDeviceId = cameraSelect.value;
-      if(isCameraOn) {
-        startCameraAndDetect(currentDeviceId);
-      }
-    });
-
-    startBtn.addEventListener('click', async () => {
-      startScreen.style.display = 'none';
-      controls.style.display = 'block';
-      message.textContent = '';
-
-      try {
-        await unlockAudio();
-        await listCameras();
-        await startCameraAndDetect(currentDeviceId);
-      } catch (e) {
-        message.textContent = 'ไม่สามารถเริ่มใช้งานได้: ' + e.message;
-      }
-    });
-
-    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-      listCameras();
-    }
+      init();
+    };
   </script>
-
 </body>
 </html>
