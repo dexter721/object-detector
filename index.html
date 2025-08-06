@@ -63,6 +63,7 @@
     let isCameraOn = false;
     let detecting = true;
     let isMuted = false;
+    let lastSpokenTimes = {};
     let speechVolume = 1.0;
     let currentDeviceId = null;
 
@@ -92,10 +93,6 @@
       "headphones": "หูฟัง",
       "box": "กล่อง"
     };
-
-    // คิวสำหรับพูด
-    let speechQueue = [];
-    let isSpeaking = false;
 
     async function listCameras() {
       try {
@@ -149,38 +146,30 @@
     }
 
     function speak(text) {
-      if(isMuted || !text) return;
-
-      // ป้องกันพูดซ้ำใน 3 วินาที
+      if(isMuted) return;
       const now = Date.now();
-      if(speechQueue.includes(text)) return; // ถ้ามีในคิวแล้วไม่เพิ่มซ้ำ
-
-      // เพิ่มข้อความในคิว
-      speechQueue.push(text);
-
-      // เรียกพูดถ้าไม่กำลังพูด
-      if(!isSpeaking) processSpeechQueue();
-    }
-
-    function processSpeechQueue() {
-      if(isSpeaking) return;
-      if(speechQueue.length === 0) return;
-
-      const text = speechQueue.shift();
-      isSpeaking = true;
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = "th-TH";
-      utter.volume = speechVolume;
-      utter.onend = () => {
-        isSpeaking = false;
-        processSpeechQueue();
-      };
-      speechSynthesis.speak(utter);
+      if (!lastSpokenTimes[text] || (now - lastSpokenTimes[text] > 3000)) {
+        if (speechSynthesis.speaking) {
+          speechSynthesis.cancel();
+        }
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = "th-TH";
+        utter.volume = speechVolume;
+        speechSynthesis.speak(utter);
+        lastSpokenTimes[text] = now;
+      }
     }
 
     async function detectFrame() {
       if (!detecting) return;
+
       try {
+        // เช็คขนาดวิดีโอก่อน ถ้ายังไม่พร้อมให้รอ
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          requestAnimationFrame(detectFrame);
+          return;
+        }
+
         const predictions = await model.detect(video);
         if (predictions.length > 0) {
           let found = false;
@@ -202,6 +191,7 @@
       } catch (e) {
         message.textContent = "เกิดข้อผิดพลาดในการตรวจจับ: " + e.message;
       }
+
       requestAnimationFrame(detectFrame);
     }
 
@@ -258,13 +248,18 @@
     });
 
     switchCamBtn.addEventListener('click', async () => {
+      // สลับกล้องในรายการเลือกกล้อง
       const devices = [...cameraSelect.options];
+      if (devices.length === 0) return;
+
       let currentIndex = devices.findIndex(d => d.value === currentDeviceId);
       let nextIndex = (currentIndex + 1) % devices.length;
       cameraSelect.selectedIndex = nextIndex;
       currentDeviceId = devices[nextIndex].value;
+
       if(isCameraOn) {
-        startCameraAndDetect(currentDeviceId);
+        // เรียก startCameraAndDetect ใหม่ทันที สลับกล้องเลย
+        await startCameraAndDetect(currentDeviceId);
       }
     });
 
