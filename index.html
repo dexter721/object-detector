@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>AI Object Detector with Voice</title>
   <style>
     body { font-family: sans-serif; text-align: center; margin: 20px; }
@@ -16,7 +16,7 @@
   <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
 
   <div id="startScreen">
-    <button id="startBtn" style="font-size:24px; padding: 15px 30px;">กดเพื่อเริ่มใช้งาน</button>
+    <button id="startBtn" style="font-size:24px; padding: 15px 30px;">เริ่มใช้งาน</button>
     <p>โปรดกดปุ่มเพื่อเปิดกล้องและอนุญาตเสียงพูด</p>
   </div>
 
@@ -53,87 +53,44 @@
     let currentFacingMode = "environment";
     let speechVolume = 1.0;
 
-    // คำแปลชื่อวัตถุภาษาอังกฤษเป็นไทย
     const labelDict = {
-      "chair": "เก้าอี้",
-      "couch": "โซฟา",
-      "bed": "เตียง",
-      "dining table": "โต๊ะ",
-      "tv": "ทีวี",
-      "cell phone": "โทรศัพท์",
-      "book": "หนังสือ",
-      "bottle": "ขวดน้ำ",
-      "cup": "ถ้วย",
-      "bowl": "ชาม",
-      "remote": "รีโมท",
-      "mouse": "เมาส์",
-      "keyboard": "คีย์บอร์ด",
-      "laptop": "โน้ตบุ๊ก",
-      "microwave": "ไมโครเวฟ",
-      "sports ball": "ลูกบอล",
-      "scissors": "กรรไกร",
-      "backpack": "กระเป๋า",
-      "teddy bear": "ตุ๊กตา",
-      "pen": "ปากกา",
-      "pencil": "ดินสอ",
-      "eraser": "ยางลบ",
-      "headphones": "หูฟัง",
-      "box": "กล่อง"
+      "chair": "เก้าอี้", "couch": "โซฟา", "bed": "เตียง", "dining table": "โต๊ะ",
+      "tv": "ทีวี", "cell phone": "โทรศัพท์", "book": "หนังสือ", "bottle": "ขวดน้ำ",
+      "cup": "ถ้วย", "bowl": "ชาม", "remote": "รีโมท", "mouse": "เมาส์",
+      "keyboard": "คีย์บอร์ด", "laptop": "โน้ตบุ๊ก", "microwave": "ไมโครเวฟ",
+      "sports ball": "ลูกบอล", "scissors": "กรรไกร", "backpack": "กระเป๋า",
+      "teddy bear": "ตุ๊กตา", "pen": "ปากกา", "pencil": "ดินสอ", "eraser": "ยางลบ",
+      "headphones": "หูฟัง", "box": "กล่อง"
     };
 
-    // ตั้งค่ากล้อง ตามโหมดกล้อง (กล้องหน้า/หลัง)
     async function setupCamera() {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
-        stream = null;
       }
 
-      try {
-        const constraints = {
-          video: {
-            facingMode: { ideal: currentFacingMode }
-          },
-          audio: false
-        };
+      const constraints = {
+        video: { facingMode: { ideal: currentFacingMode } },
+        audio: false
+      };
 
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
 
-        // ถ้าใช้กล้องหน้า ให้เปิดโหมดกระจก
-        if (currentFacingMode === 'user') {
-          video.style.transform = 'scaleX(-1)';
-        } else {
-          video.style.transform = 'none';
-        }
-
-        return new Promise(resolve => {
-          video.onloadedmetadata = () => resolve(video);
-        });
-
-      } catch (error) {
-        alert('ไม่สามารถเข้าถึงกล้องได้: ' + error.message);
-        throw error;
+      if (currentFacingMode === 'user') {
+        video.style.transform = 'scaleX(-1)';
+      } else {
+        video.style.transform = 'none';
       }
-    }
 
-    // ปลุกระบบเสียงพูด (แก้ปัญหาเบราว์เซอร์บางตัวบล็อกเสียง)
-    async function unlockAudio() {
       return new Promise(resolve => {
-        const utter = new SpeechSynthesisUtterance('');
-        utter.volume = 0;
-        utter.lang = "th-TH";
-        utter.onend = () => resolve();
-        speechSynthesis.speak(utter);
+        video.onloadedmetadata = () => resolve(video);
       });
     }
 
-    // ฟังก์ชันพูดภาษาไทย พร้อมตรวจสอบเวลาซ้ำ ไม่พูดซ้ำบ่อยเกินไป
     function speak(text) {
       const now = Date.now();
       if (!lastSpokenTimes[text] || (now - lastSpokenTimes[text] > 3000)) {
-        if (speechSynthesis.speaking) {
-          speechSynthesis.cancel();
-        }
+        if (speechSynthesis.speaking) speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(text);
         utter.lang = "th-TH";
         utter.volume = speechVolume;
@@ -142,7 +99,6 @@
       }
     }
 
-    // ตรวจจับวัตถุในทุก ๆ เฟรมของกล้อง
     async function detectFrame() {
       if (!detecting) return;
 
@@ -169,7 +125,6 @@
       requestAnimationFrame(detectFrame);
     }
 
-    // เริ่มต้นกล้องและโหลดโมเดล
     async function startCameraAndDetect() {
       await setupCamera();
       video.play();
@@ -184,8 +139,7 @@
       detectFrame();
     }
 
-    // หยุดกล้องและตรวจจับ
-    async function stopCameraAndDetect() {
+    async function stopCamera() {
       detecting = false;
       label.textContent = "";
       if (stream) {
@@ -197,10 +151,9 @@
       toggleCamBtn.textContent = "เปิดกล้อง";
     }
 
-    // ปุ่มเปิด/ปิดกล้อง
     toggleCamBtn.addEventListener('click', async () => {
       if (isCameraOn) {
-        await stopCameraAndDetect();
+        await stopCamera();
       } else {
         await startCameraAndDetect();
         isCameraOn = true;
@@ -208,24 +161,28 @@
       }
     });
 
-    // ปุ่มสลับกล้องหน้า/หลัง
     switchCamBtn.addEventListener('click', async () => {
       if (!isCameraOn) return;
       currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
-      await stopCameraAndDetect();
-      await startCameraAndDetect();
-      isCameraOn = true;
-      toggleCamBtn.textContent = "ปิดกล้อง";
+      await setupCamera();
     });
 
-    // ปรับเสียงพูด
     volumeSlider.addEventListener('input', () => {
       const val = volumeSlider.value;
       volumeValue.textContent = val;
       speechVolume = val / 100;
     });
 
-    // เริ่มใช้งานเมื่อกดปุ่ม
+    async function unlockAudio() {
+      return new Promise(resolve => {
+        const utter = new SpeechSynthesisUtterance('');
+        utter.volume = 0;
+        utter.lang = "th-TH";
+        utter.onend = () => resolve();
+        speechSynthesis.speak(utter);
+      });
+    }
+
     startBtn.addEventListener('click', async () => {
       startScreen.style.display = "none";
       video.style.display = "block";
@@ -237,6 +194,5 @@
       toggleCamBtn.textContent = "ปิดกล้อง";
     });
   </script>
-
 </body>
 </html>
