@@ -16,7 +16,7 @@
   <h1>กล้องตรวจจับวัตถุพร้อมเสียงพูด</h1>
 
   <div id="startScreen">
-    <button id="startBtn" style="font-size:24px; padding: 15px 30px;">เริ่มใช้งาน</button>
+    <button id="startBtn" style="font-size:24px; padding: 15px 30px;">กดเพื่อเริ่มใช้งาน</button>
     <p>โปรดกดปุ่มเพื่อเปิดกล้องและอนุญาตเสียงพูด</p>
   </div>
 
@@ -54,43 +54,81 @@
     let speechVolume = 1.0;
 
     const labelDict = {
-      "chair": "เก้าอี้", "couch": "โซฟา", "bed": "เตียง", "dining table": "โต๊ะ",
-      "tv": "ทีวี", "cell phone": "โทรศัพท์", "book": "หนังสือ", "bottle": "ขวดน้ำ",
-      "cup": "ถ้วย", "bowl": "ชาม", "remote": "รีโมท", "mouse": "เมาส์",
-      "keyboard": "คีย์บอร์ด", "laptop": "โน้ตบุ๊ก", "microwave": "ไมโครเวฟ",
-      "sports ball": "ลูกบอล", "scissors": "กรรไกร", "backpack": "กระเป๋า",
-      "teddy bear": "ตุ๊กตา", "pen": "ปากกา", "pencil": "ดินสอ", "eraser": "ยางลบ",
-      "headphones": "หูฟัง", "box": "กล่อง"
+      "chair": "เก้าอี้",
+      "couch": "โซฟา",
+      "bed": "เตียง",
+      "dining table": "โต๊ะ",
+      "tv": "ทีวี",
+      "cell phone": "โทรศัพท์",
+      "book": "หนังสือ",
+      "bottle": "ขวดน้ำ",
+      "cup": "ถ้วย",
+      "bowl": "ชาม",
+      "remote": "รีโมท",
+      "mouse": "เมาส์",
+      "keyboard": "คีย์บอร์ด",
+      "laptop": "โน้ตบุ๊ก",
+      "microwave": "ไมโครเวฟ",
+      "sports ball": "ลูกบอล",
+      "scissors": "กรรไกร",
+      "backpack": "กระเป๋า",
+      "teddy bear": "ตุ๊กตา",
+      "pen": "ปากกา",
+      "pencil": "ดินสอ",
+      "eraser": "ยางลบ",
+      "headphones": "หูฟัง",
+      "box": "กล่อง"
     };
 
     async function setupCamera() {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
+        stream = null;
       }
 
-      const constraints = {
-        video: { facingMode: { ideal: currentFacingMode } },
-        audio: false
-      };
+      try {
+        const constraints = {
+          video: {
+            facingMode: { ideal: currentFacingMode }
+          },
+          audio: false
+        };
 
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-      video.srcObject = stream;
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
 
-      if (currentFacingMode === 'user') {
-        video.style.transform = 'scaleX(-1)';
-      } else {
-        video.style.transform = 'none';
+        if (currentFacingMode === 'user') {
+          video.style.transform = 'scaleX(-1)';
+        } else {
+          video.style.transform = 'none';
+        }
+
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => resolve(video);
+        });
+
+      } catch (error) {
+        alert('ไม่สามารถเข้าถึงกล้องได้: ' + error.message);
+        throw error;
       }
+    }
 
+    async function unlockAudio() {
       return new Promise(resolve => {
-        video.onloadedmetadata = () => resolve(video);
+        const utter = new SpeechSynthesisUtterance('');
+        utter.volume = 0;
+        utter.lang = "th-TH";
+        utter.onend = () => resolve();
+        speechSynthesis.speak(utter);
       });
     }
 
     function speak(text) {
       const now = Date.now();
       if (!lastSpokenTimes[text] || (now - lastSpokenTimes[text] > 3000)) {
-        if (speechSynthesis.speaking) speechSynthesis.cancel();
+        if (speechSynthesis.speaking) {
+          speechSynthesis.cancel();
+        }
         const utter = new SpeechSynthesisUtterance(text);
         utter.lang = "th-TH";
         utter.volume = speechVolume;
@@ -139,7 +177,7 @@
       detectFrame();
     }
 
-    async function stopCamera() {
+    async function stopCameraAndDetect() {
       detecting = false;
       label.textContent = "";
       if (stream) {
@@ -153,7 +191,7 @@
 
     toggleCamBtn.addEventListener('click', async () => {
       if (isCameraOn) {
-        await stopCamera();
+        await stopCameraAndDetect();
       } else {
         await startCameraAndDetect();
         isCameraOn = true;
@@ -164,7 +202,10 @@
     switchCamBtn.addEventListener('click', async () => {
       if (!isCameraOn) return;
       currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
-      await setupCamera();
+      await stopCameraAndDetect();
+      await startCameraAndDetect();
+      isCameraOn = true;
+      toggleCamBtn.textContent = "ปิดกล้อง";
     });
 
     volumeSlider.addEventListener('input', () => {
@@ -172,16 +213,6 @@
       volumeValue.textContent = val;
       speechVolume = val / 100;
     });
-
-    async function unlockAudio() {
-      return new Promise(resolve => {
-        const utter = new SpeechSynthesisUtterance('');
-        utter.volume = 0;
-        utter.lang = "th-TH";
-        utter.onend = () => resolve();
-        speechSynthesis.speak(utter);
-      });
-    }
 
     startBtn.addEventListener('click', async () => {
       startScreen.style.display = "none";
@@ -194,5 +225,6 @@
       toggleCamBtn.textContent = "ปิดกล้อง";
     });
   </script>
+
 </body>
 </html>
